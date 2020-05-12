@@ -5,6 +5,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.Uri;
@@ -18,6 +20,8 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.nineoldandroids.view.ViewHelper;
 import com.proton.carepatchtemp.R;
 import com.proton.carepatchtemp.activity.base.BaseActivity;
@@ -28,6 +32,8 @@ import com.proton.carepatchtemp.component.NetChangeReceiver;
 import com.proton.carepatchtemp.constant.AppConfigs;
 import com.proton.carepatchtemp.database.ProfileManager;
 import com.proton.carepatchtemp.databinding.ActivityHomeBinding;
+import com.proton.carepatchtemp.factory.bean.ListItem;
+import com.proton.carepatchtemp.factory.receiver.UsbAttachReceiver;
 import com.proton.carepatchtemp.fragment.base.BaseFragment;
 import com.proton.carepatchtemp.fragment.devicemanage.DeviceManageFragment;
 import com.proton.carepatchtemp.fragment.home.HealthyTipsFragment;
@@ -49,6 +55,7 @@ import com.proton.carepatchtemp.utils.StatusBarUtil;
 import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.view.AppNotificationDialog;
 import com.proton.temp.connector.TempConnectorManager;
+import com.proton.temp.connector.at.CustomProber;
 import com.wms.logger.Logger;
 import com.wms.utils.CommonUtils;
 
@@ -57,6 +64,8 @@ import java.util.List;
 
 import cn.pedant.SweetAlert.SweetAlertDialog;
 import cn.pedant.SweetAlert.Type;
+
+import static com.proton.carepatchtemp.factory.receiver.UsbAttachReceiver.ACTION_USB_PERMISSION;
 
 public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
     private BaseFragment mCurrentFragment;
@@ -69,6 +78,11 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
     private BroadcastReceiver mNetReceiver = new NetChangeReceiver();
     private BaseFragment mOpenFragment;
     private List<Long> mShowingDialog = new ArrayList<>();
+    /**
+     * 串口信息
+     */
+    private ArrayList<ListItem> listItems = new ArrayList<>();
+    private UsbAttachReceiver usbReceiver = new UsbAttachReceiver();
 
     @Override
     protected int inflateContentView() {
@@ -83,6 +97,17 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
         MeasureReportCenter.getAliyunToken();
         MeasureCenter.getAlgorithmConfig(null);
         showMeasureFragment();
+
+        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        registerReceiver(usbReceiver, filter);
+
+        /**
+         * 获取串口信息
+         */
+        fetchUsbInfo();
+
     }
 
     private void getFireware() {
@@ -368,8 +393,44 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
             setMenuProfile();
         } else if (eventType == MessageEvent.EventType.HOME_GET_MSG) {
             initData();
+        } else if (eventType == MessageEvent.EventType.USB_ATTACH || eventType == MessageEvent.EventType.USB_DETACHED) {
+            fetchUsbInfo();
         }
     }
+
+    /**
+     * 获取串口信息
+     */
+    private void fetchUsbInfo() {
+        UsbManager usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        UsbSerialProber usaDefaultProbe = UsbSerialProber.getDefaultProber(mContext);
+        UsbSerialProber usaCustomProbe = CustomProber.getCustomProber();
+        listItems.clear();
+        for (UsbDevice device : usbManager.getDeviceList().values()) {
+            UsbSerialDriver driver = usaDefaultProbe.probeDevice(device);
+            if (driver == null) {
+                driver = usaCustomProbe.probeDevice(device);
+            }
+            if (driver != null) {
+                for (int port = 0; port < driver.getPorts().size(); port++)
+                    listItems.add(new ListItem(device, port, driver));
+            } else {
+                listItems.add(new ListItem(device, 0, null));
+            }
+        }
+        Logger.w("usb device size is : ", null == listItems ? 0 : listItems.size());
+    }
+
+    /**
+     * 获取串口列表,供给外部调用
+     *
+     * @return
+     */
+    public List<ListItem> fetchUsbDeviceList() {
+        Logger.w("usb device size is : ", null == listItems ? 0 : listItems.size());
+        return listItems;
+    }
+
 
     /**
      * 设置侧边栏头像
@@ -461,6 +522,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
     protected void onDestroy() {
         Utils.clearAllMeasureViewModel();
         TempConnectorManager.close();
+        unregisterReceiver(usbReceiver);
         super.onDestroy();
     }
 

@@ -1,13 +1,13 @@
-package com.proton.temp.connector.at.constant;
+package com.proton.temp.connector.at.instruction;
 
 /**
- * @Description: 指令常量
+ * @Description:
  * @Author: yxf
- * @CreateDate: 2020/5/7 17:31
+ * @CreateDate: 2020/4/29 15:04
  * @UpdateUser: yxf
- * @UpdateDate: 2020/5/7 17:31
+ * @UpdateDate: 2020/4/29 15:04
  */
-public class InstructionConstant {
+public class Constant {
 
     /**
      * 查询模式

@@ -1,7 +1,7 @@
 package com.proton.temp.connector.at.instruction;
 
 /**
- * @Description: 发送的指令类型
+ * @Description: 指令类型
  * @Author: yxf
  * @CreateDate: 2020/5/7 11:17
  * @UpdateUser: yxf
@@ -11,7 +11,7 @@ public enum InstructionType {
     AT,
     ROLE,
     IMME,
-    DISC,
+//    DISC,
     COON,
     READ,
     NOTIFY,

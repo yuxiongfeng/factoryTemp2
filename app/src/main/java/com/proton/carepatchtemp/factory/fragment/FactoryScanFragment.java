@@ -1,7 +1,10 @@
 package com.proton.carepatchtemp.factory.fragment;
 
+import android.content.Context;
 import android.content.Intent;
 import android.databinding.Observable;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -9,6 +12,8 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.proton.carepatchtemp.R;
 import com.proton.carepatchtemp.activity.common.GlobalWebActivity;
 import com.proton.carepatchtemp.bean.MeasureBean;
@@ -17,6 +22,7 @@ import com.proton.carepatchtemp.database.ProfileManager;
 import com.proton.carepatchtemp.databinding.FragmentMeasureScanDeviceBinding;
 import com.proton.carepatchtemp.databinding.LayoutEmptyDeviceListBinding;
 import com.proton.carepatchtemp.factory.bean.CalibrateBean;
+import com.proton.carepatchtemp.factory.bean.ListItem;
 import com.proton.carepatchtemp.fragment.base.BaseFragment;
 import com.proton.carepatchtemp.net.bean.MessageEvent;
 import com.proton.carepatchtemp.utils.BlackToast;
@@ -28,6 +34,7 @@ import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.view.WarmDialog;
 import com.proton.carepatchtemp.view.recyclerheader.HeaderAndFooterWrapper;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
+import com.proton.temp.connector.at.CustomProber;
 import com.proton.temp.connector.bean.DeviceBean;
 import com.proton.temp.connector.bluetooth.BleConnector;
 import com.proton.temp.connector.bluetooth.callback.OnScanListener;
@@ -48,6 +55,7 @@ import java.util.List;
  * 扫描页面
  */
 public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceBinding> {
+
     private List<DeviceBean> mDeviceList = new ArrayList<>();
     private HeaderAndFooterWrapper mAdapter;
     private LayoutEmptyDeviceListBinding emptyDeviceBinding;
@@ -252,7 +260,50 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
             }
         });
         viewModel.connectStatus.set(1);
-        viewModel.connectDevice();
+        viewModel.setActivity(getActivity());
+
+        List<MeasureViewModel> allMeasureViewModelList = Utils.getAllMeasureViewModelList();
+        Logger.w("measureViewModel size is : ",allMeasureViewModelList.size(),"deviceId is : ",allMeasureViewModelList.get(0).deviceId.get());
+        List<ListItem> usbDeviceList = Utils.fetchUsbDeviceInfos();
+
+        int idleDeviceId = 0;
+        int idlePort = 0;
+        for (int i = 0; i < usbDeviceList.size(); i++) {
+            int deviceId = usbDeviceList.get(i).device.getDeviceId();
+            int port = usbDeviceList.get(i).port;
+
+            if (allMeasureViewModelList != null && allMeasureViewModelList.size() > 0) {
+
+                for (int j = 0; j < allMeasureViewModelList.size(); j++) {
+                    if (allMeasureViewModelList.get(j).usbDeviceId.get() == deviceId) {
+                        break;
+                    }
+                    if (j == allMeasureViewModelList.size()) {
+                        idleDeviceId = deviceId;
+                        idlePort = port;
+                        break;
+                    }
+                }
+            }else {
+                idleDeviceId = deviceId;
+                idlePort = port;
+                break;
+            }
+
+            if (idleDeviceId > 0) {
+                Logger.w("可用串口设备id ：", idleDeviceId);
+                break;
+            }
+        }
+
+        if (idleDeviceId == 0 || idlePort == 0) {
+            BlackToast.show("没有可用串口...");
+        } else {
+            viewModel.usbDeviceId.set(idleDeviceId);
+            viewModel.usbPortNum.set(idlePort);
+            viewModel.connectDevice();
+        }
+
     }
 
 

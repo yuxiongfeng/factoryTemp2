@@ -1,7 +1,7 @@
-package com.proton.temp.connector.at.constant;
+package com.proton.temp.connector.at.instruction;
 
 /**
- * @Description: 用于判断返回的字符串是否开始或结束，如：发送AT指令，返回数据OK，这个时候就判断返回的数据是否已OK开头，并且以OK做结尾
+ * @Description:
  * @Author: yxf
  * @CreateDate: 2020/5/7 10:11
  * @UpdateUser: yxf
@@ -10,13 +10,20 @@ package com.proton.temp.connector.at.constant;
 public class ResultConstant {
 
     public static final String AT = "OK";
+    /**
+     * 未连接-》连接时，可能会立马返回OK+LOST
+     * 已连接下，输入AT，会返回OK+LOST
+     */
     public static final String AT_LOST = "OK+LOST";
 
-    public static final String ROLE_START = "OK+Set:1";
-    public static final String ROLE_END = "OK+Set:1";
+    /**
+     * 获取是否是主模式，手动模式
+     */
+    public static final String SET_ROLE_IMME_1 = "OK+Set:1";
+    public static final String GET_ROLE_IMME_1 = "OK+Get:1";
 
-    public static final String IMME_START = "OK+Set:1";
-    public static final String IMME_END = "OK+Set:1";
+    public static final String SET_ROLE_IMME_0 = "OK+Set:0";
+    public static final String GET_ROLE_IMME_0 = "OK+Get:0";
 
     public static final String DISC_START = "OK+DISCS";
     public static final String DISC_END = "OK+DISCE";

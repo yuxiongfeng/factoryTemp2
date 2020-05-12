@@ -32,6 +32,7 @@ import com.proton.carepatchtemp.bean.ReportBean;
 import com.proton.carepatchtemp.component.App;
 import com.proton.carepatchtemp.constant.AppConfigs;
 import com.proton.carepatchtemp.enums.InstructionConstant;
+import com.proton.carepatchtemp.factory.bean.ListItem;
 import com.proton.carepatchtemp.utils.net.OSSUtils;
 import com.proton.carepatchtemp.view.SystemDialog;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
@@ -562,6 +563,15 @@ public class Utils {
     }
 
     /**
+     * 获取Usb设备列表
+     * @return
+     */
+    public static List<ListItem> fetchUsbDeviceInfos() {
+        HomeActivity activity = ActivityManager.findActivity(Settings.MEASURE_ACTIVITY);
+        return activity.fetchUsbDeviceList();
+    }
+
+    /**
      * 未登录下隐藏某个view
      */
     public static void notLoginViewHide(View view) {
@@ -698,11 +708,11 @@ public class Utils {
     /**
      * 获取体温校准测量的viewModel
      */
-    public static MeasureViewModel getMeasureViewModel(String macaddress){
+    public static MeasureViewModel getMeasureViewModel(String macaddress) {
         if (TextUtils.isEmpty(macaddress)) {
             return null;
         }
-        return ViewModelProviders.of(ActivityManager.findActivity(Settings.MEASURE_ACTIVITY)).get(macaddress,MeasureViewModel.class);
+        return ViewModelProviders.of(ActivityManager.findActivity(Settings.MEASURE_ACTIVITY)).get(macaddress, MeasureViewModel.class);
     }
 
     /**
@@ -727,10 +737,11 @@ public class Utils {
 
     /**
      * 获取所有的测量measureViewModel
+     *
      * @return
      */
-    public static List<MeasureViewModel>getAllMeasureViewModelList(){
-        List<MeasureViewModel>list=new ArrayList<>();
+    public static List<MeasureViewModel> getAllMeasureViewModelList() {
+        List<MeasureViewModel> list = new ArrayList<>();
         Map<String, ViewModel> allMeasureViewModel = Utils.getAllMeasureViewModel();
         Set<Map.Entry<String, ViewModel>> entries = allMeasureViewModel.entrySet();
         Iterator<Map.Entry<String, ViewModel>> iterator = entries.iterator();
@@ -761,7 +772,6 @@ public class Utils {
     public static void clearMeasureViewModel(String macaddress, long profileId) {
         clearViewModel(ActivityManager.findActivity(Settings.MEASURE_ACTIVITY), macaddress + ":" + profileId);
     }
-
 
 
     /**

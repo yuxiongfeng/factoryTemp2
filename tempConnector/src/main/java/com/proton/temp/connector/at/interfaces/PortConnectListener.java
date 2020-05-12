@@ -1,4 +1,4 @@
-package com.proton.temp.connector.at.callback;
+package com.proton.temp.connector.at.interfaces;
 
 /**
  * @Description:

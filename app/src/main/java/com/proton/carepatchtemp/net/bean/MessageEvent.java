@@ -246,5 +246,14 @@ public class MessageEvent {
          */
         QUALIFICATION_REFRESH,
 
+        /**
+         * 串口设备插入
+         */
+        USB_ATTACH,
+        /**
+         * 串口设备拔出
+         */
+        USB_DETACHED,
+
     }
 }

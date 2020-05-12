@@ -1,13 +1,18 @@
 package com.proton.carepatchtemp.viewmodel.measure;
 
 import android.app.Activity;
+import android.content.Context;
 import android.databinding.Observable;
 import android.databinding.ObservableBoolean;
 import android.databinding.ObservableField;
 import android.databinding.ObservableFloat;
 import android.databinding.ObservableInt;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.text.TextUtils;
 
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.proton.carepatchtemp.bean.MeasureBean;
 import com.proton.carepatchtemp.bean.ReportBean;
 import com.proton.carepatchtemp.component.App;
@@ -96,6 +101,11 @@ public class MeasureViewModel extends BaseViewModel {
      * 合格状态  0 没有进入合格状态  1 已合格  2 未合格
      */
     public ObservableInt qualificationStatus = new ObservableInt(0);
+
+    private Activity mActivity;
+
+    public ObservableInt usbDeviceId = new ObservableInt(0);
+    public ObservableInt usbPortNum = new ObservableInt(0);
 
     //--------------------------------------体温校准新增变量end------------------
 
@@ -429,11 +439,19 @@ public class MeasureViewModel extends BaseViewModel {
             }
         }
         getConnectorManager().addConnectionTypeListener(mConnectionTypeListener);
+        if (getConnectorManager().getConnectionType() == ConnectionType.BLUETOOTH) {
+            getConnectorManager().setActivity(mActivity);
+            getConnectorManager().setUsbDeviceId(usbDeviceId.get());
+            getConnectorManager().setUsbPortNum(usbPortNum.get());
+            getConnectorManager().setConnectionType(ConnectionType.AT);
+        }
+
         getConnectorManager()
                 .setReconnectCount(retryCount)
                 .setEnableCacheTemp(false)
                 .connect(mConnectorListener, mDataListener, true);
     }
+
 
     public void cancelConnect() {
         getConnectorManager().cancelConnect();
@@ -550,6 +568,11 @@ public class MeasureViewModel extends BaseViewModel {
 
     public TempConnectorManager getConnectorManager() {
         return TempConnectorManager.getInstance(measureInfo.get().getDevice());
+    }
+
+
+    public void setActivity(Activity activity) {
+        this.mActivity = activity;
     }
 
     /**

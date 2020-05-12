@@ -7,12 +7,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 
 import com.proton.temp.algorithm.AlgorithmManager;
 import com.proton.temp.algorithm.bean.AlgorithmData;
 import com.proton.temp.algorithm.interfaces.AlgorithmListener;
 import com.proton.temp.connector.at.AtConnector;
+import com.proton.temp.connector.at.interfaces.PortConnectListener;
 import com.proton.temp.connector.bean.ConnectionType;
 import com.proton.temp.connector.bean.DeviceBean;
 import com.proton.temp.connector.bean.DeviceType;
@@ -54,13 +57,14 @@ public class TempConnectorManager {
         this.activity = activity;
     }
 
-    public void setDeviceId(int deviceId) {
+    public void setUsbDeviceId(int deviceId) {
         this.deviceId = deviceId;
     }
 
-    public void setPortNum(int portNum) {
+    public void setUsbPortNum(int portNum) {
         this.portNum = portNum;
     }
+
     /**
      * AT新增===========================end
      */
@@ -181,6 +185,9 @@ public class TempConnectorManager {
      * 连接方式监听器
      */
     private List<ConnectionTypeListener> connectTypeListener = new ArrayList<>();
+
+    private Handler mHandler = new Handler(Looper.getMainLooper());
+
     /**
      * 算法数据接收
      */
@@ -213,10 +220,24 @@ public class TempConnectorManager {
             }
         }
     };
+
+    private PortConnectListener portConnectListener=new PortConnectListener(){
+        @Override
+        public void onConnectSuccess() {
+            super.onConnectSuccess();
+        }
+
+        @Override
+        public void onConnectFaild(String msg) {
+            super.onConnectFaild(msg);
+        }
+    };
+
     /**
      * 算法状态回调
      */
     private List<AlgorithmStatusListener> algorithmStatusListeners = new ArrayList<>();
+
     /**
      * 连接状态回调
      */
@@ -249,7 +270,7 @@ public class TempConnectorManager {
             mDisconnectTime = System.currentTimeMillis();
             Logger.w("onDisconnect....");
             connectStatus = 1;
-            if (getConnectionType().equals(ConnectionType.NET)) {
+            if (isManual) {
                 List<ConnectStatusListener> listeners = new ArrayList<>(connectStatusListeners);
                 for (ConnectStatusListener listener : listeners) {
                     listener.onDisconnect(false);
@@ -439,6 +460,10 @@ public class TempConnectorManager {
                 break;
             case AT:
                 mConnector = new AtConnector(activity, mContext, deviceId, portNum);
+                if (!((AtConnector) mConnector).isPortConnected()) {
+                    mHandler.post(() -> ((AtConnector) mConnector).openSerialPort());
+                    ((AtConnector) mConnector).setPortConnectListener(portConnectListener);
+                }
                 break;
         }
         doConnectionTypeCallback();
@@ -644,6 +669,9 @@ public class TempConnectorManager {
                 }
                 return;
             }
+        }
+        if (mConnector instanceof AtConnector) {
+            ((AtConnector) mConnector).setPatchMac(patchMacaddress);
         }
         mConnector.connect(connectStatusListener, mDataListener);
     }
@@ -972,7 +1000,9 @@ public class TempConnectorManager {
             return ConnectionType.BLUETOOTH;
         } else if (mConnector instanceof BroadcastConnector) {
             return ConnectionType.BROADCAST;
-        } else {
+        } else if (mConnector instanceof AtConnector){
+            return ConnectionType.AT;
+        }else {
             return ConnectionType.NET;
         }
     }
