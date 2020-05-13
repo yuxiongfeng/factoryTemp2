@@ -3,13 +3,22 @@ package com.proton.temp.connector.bean;
 import java.io.Serializable;
 
 public class DeviceBean implements Serializable {
-    private String macaddress;
     private String dockerMacaddress;
     private ConnectionType connectionType = ConnectionType.BLUETOOTH;
     private boolean isNeedUpdate;
-    private String hardVersion;
     private DeviceType deviceType = DeviceType.P03;
+
+    private String macaddress;
+    private String hardVersion;
     private int bluetoothRssi;
+    private String serialNum;
+
+    public DeviceBean(String macaddress, String hardVersion, int bluetoothRssi, String serialNum) {
+        this.macaddress = macaddress;
+        this.hardVersion = hardVersion;
+        this.bluetoothRssi = bluetoothRssi;
+        this.serialNum = serialNum;
+    }
 
     public DeviceBean(String macaddress, DeviceType deviceType) {
         this.macaddress = macaddress;

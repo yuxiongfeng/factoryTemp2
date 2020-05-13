@@ -25,7 +25,9 @@ import android.view.Gravity;
 import android.view.View;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.nineoldandroids.view.ViewHelper;
 import com.proton.carepatchtemp.R;
 import com.proton.carepatchtemp.activity.base.BaseActivity;
@@ -60,6 +62,7 @@ import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.view.AppNotificationDialog;
 import com.proton.temp.connector.TempConnectorManager;
 import com.proton.temp.connector.at.CustomProber;
+import com.proton.temp.connector.bluetooth.utils.BleUtils;
 import com.wms.logger.Logger;
 import com.wms.utils.CommonUtils;
 
@@ -67,6 +70,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.Executors;
 
 import cn.pedant.SweetAlert.SweetAlertDialog;
 import cn.pedant.SweetAlert.Type;
@@ -81,7 +85,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
     private ProfileFragment mProfileFragment;
     private DeviceManageFragment mDeviceManagerFragment;
     private SettingFragment mSettingFragment;
-    private BroadcastReceiver mNetReceiver = new NetChangeReceiver();
+    //    private BroadcastReceiver mNetReceiver = new NetChangeReceiver();
     private BaseFragment mOpenFragment;
     private List<Long> mShowingDialog = new ArrayList<>();
 
@@ -110,6 +114,12 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
      * 当前设备下标
      */
     private int currentDeviceIndex;
+    private SerialInputOutputManager usbIoManager;
+
+    /**
+     * 打开app，第一次获取usb设备信息，重置所有usb设备，防止上次app异常断开，如：连接过程中发生闪退
+     */
+    private boolean isFirst = true;
 
     @Override
     protected int inflateContentView() {
@@ -121,8 +131,8 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
         super.init();
         initDrawerLayout();
         checkNotificationPermission();
-        MeasureReportCenter.getAliyunToken();
-        MeasureCenter.getAlgorithmConfig(null);
+//        MeasureReportCenter.getAliyunToken();
+//        MeasureCenter.getAlgorithmConfig(null);
         showMeasureFragment();
 
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
@@ -134,66 +144,6 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
          * 获取串口信息
          */
         fetchUsbInfo(true);
-    }
-
-    private void getFireware() {
-        if (!App.get().isLogined()) return;
-        DeviceCenter.getUpdatePackage(new NetCallBack<List<UpdateFirmwareBean>>() {
-            @Override
-            public void onSucceed(List<UpdateFirmwareBean> data) {
-                Logger.w("获取固件更新成功:" + data.size());
-            }
-        });
-    }
-
-    @Override
-    protected void initData() {
-        super.initData();
-        UserCenter.getNewestMsg(new NetCallBack<List<MessageBean>>() {
-            @Override
-            public void onSucceed(List<MessageBean> datas) {
-                if (!CommonUtils.listIsEmpty(datas)) {
-                    for (MessageBean data : datas) {
-                        //正在显示的消息不在显示
-                        boolean isExist = false;
-                        for (Long messageId : mShowingDialog) {
-                            if (data.getMessageId() == messageId) {
-                                isExist = true;
-                            }
-                        }
-
-                        if (isExist) continue;
-                        AppNotificationDialog dialog = new AppNotificationDialog(ActivityManager.currentActivity())
-                                .setTitle(data.getTitle())
-                                .setConfirmText(data.getButtonContent())
-                                .setContent(data.getContent())
-                                .setCloseable(data.isClosable())
-                                .setCloseListener(v -> markMsgAsRead(data))
-                                .setDescription(data.getDescription());
-                        dialog.setCancelable(false);
-                        dialog.setCanceledOnTouchOutside(false);
-                        dialog.setConfirmListener(dialog1 -> {
-                            mShowingDialog.remove(data.getMessageId());
-                            markMsgAsRead(data);
-                            if (data.getJumpStatus() == 1) {
-                                IntentUtils.goToWeb(mContext, data.getUrl());
-                            }
-                        });
-                        mShowingDialog.add(data.getMessageId());
-                        dialog.show();
-                    }
-                }
-            }
-        });
-    }
-
-    private void markMsgAsRead(MessageBean data) {
-        UserCenter.markMsgAsRead(data.getMessageId(), data.getFlag(), new NetCallBack<String>() {
-            @Override
-            public void onSucceed(String data) {
-                Logger.w("标记成功");
-            }
-        });
     }
 
     @Override
@@ -424,15 +374,22 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
         } else if (eventType == MessageEvent.EventType.USB_DETACHED) {
             fetchUsbInfo(false);
         } else if (eventType == MessageEvent.EventType.USB_PERMISSION) {
-            boolean granted = (boolean) event.getObject();
-            if (granted) {
+//            boolean granted = (boolean) event.getObject();
+           /* if (granted) {
                 currentDeviceIndex++;
-            }
+            }*/
+       /*     if (currentDeviceIndex < fetchUsbDeviceList().size()) {
+                doUsbPermissionRequest();
+            } else {
+                Logger.w("所有设备usb授权完成");
+            }*/
+
             if (currentDeviceIndex < fetchUsbDeviceList().size()) {
                 doUsbPermissionRequest();
             } else {
                 Logger.w("所有设备usb授权完成");
             }
+
         }
     }
 
@@ -448,6 +405,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
                     dismissDialog();
                     doUsbPermissionRequest();
                     stopUsbTimer();
+                    isFirst = false;
                 }
             }, usbInsetMaxTime);
         }
@@ -486,9 +444,12 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
             }
         }
         Logger.w("usb device size is : ", null == listItems ? 0 : listItems.size());
-        if (isAttach) {
-            showDialog("正在初始化串口信息。。。");
+        if (isAttach && listItems.size() > 0) {
+            showDialog("正在初始化usb权限。。。");
+            currentDeviceIndex = 0;
             startUsbTimer();
+        } else {
+            Logger.w("未搜索到可用usb设备");
         }
     }
 
@@ -507,11 +468,14 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
             return;
         }
         UsbDevice device = deviceList.get(currentDeviceIndex).device;
+
         if (device == null) {
             Logger.w("connection failed: device not found");
             return;
         }
+
         UsbSerialDriver driver = UsbSerialProber.getDefaultProber(this).probeDevice(device);
+
         if (driver == null) {
             driver = CustomProber.getCustomProber().probeDevice(device);
         }
@@ -519,15 +483,76 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
             Logger.w("connection failed: no driver for device");
             return;
         }
+
+        int portNum = deviceList.get(currentDeviceIndex).port;
+        if (driver.getPorts().size() < portNum) {
+            Logger.w("connection failed: not enough ports at device");
+            return;
+        }
+        UsbSerialPort usbSerialPort = driver.getPorts().get(portNum);
+        UsbDeviceConnection usbConnection;
         if (usbManager.hasPermission(driver.getDevice())) {
             Logger.w("已有usb权限");
+            usbConnection = usbManager.openDevice(driver.getDevice());
+            currentDeviceIndex++;
         } else {
             Logger.w("没有usb权限");
             PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(this, 0, new Intent(ACTION_USB_PERMISSION), 0);
             usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
             return;
         }
+
+        if (!isFirst) {
+            return;
+        }
+
+        resetDevice(usbManager, usbConnection, usbSerialPort, driver);
+
     }
+
+    /**
+     * 重置设备
+     *
+     * @param usbManager
+     * @param usbConnection
+     * @param usbSerialPort
+     * @param driver
+     */
+    private void resetDevice(UsbManager usbManager, UsbDeviceConnection usbConnection, UsbSerialPort usbSerialPort, UsbSerialDriver driver) {
+        if (usbConnection == null) {
+            if (!usbManager.hasPermission(driver.getDevice()))
+                Logger.w("connection failed: permission denied");
+            else
+                Logger.w("connection failed: open failed");
+            return;
+        }
+
+        try {
+            usbSerialPort.open(usbConnection);
+            usbSerialPort.setParameters(9600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            if (true) {
+                usbIoManager = new SerialInputOutputManager(usbSerialPort);
+                Executors.newSingleThreadExecutor().submit(usbIoManager);
+            }
+            Logger.w("串口打开成功。。。");
+            //输入AT重置设备，断开设备
+            send("AT", usbSerialPort);
+        } catch (Exception e) {
+            Logger.w("串口打开失败。。。");
+        }
+    }
+
+    private void send(String str, UsbSerialPort usbSerialPort) {
+        try {
+            byte[] data = (str).getBytes();
+            usbSerialPort.write(data, 2000);
+            Logger.w("写入AT成功，用于初始化设备，防止app异常情况");
+            doUsbPermissionRequest();
+        } catch (Exception e) {
+            Logger.w("写入AT失败。。。");
+        }
+    }
+
 
     /**
      * 获取串口列表,供给外部调用
@@ -553,7 +578,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
 
     @Override
     protected void onResume() {
-        registerReceiver(mNetReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
+//        registerReceiver(mNetReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
         checkGPS();
         super.onResume();
     }
@@ -621,7 +646,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
     protected void onDestroy() {
         Utils.clearAllMeasureViewModel();
         TempConnectorManager.close();
-        unregisterReceiver(mNetReceiver);
+//        unregisterReceiver(mNetReceiver);
         unregisterReceiver(usbAttachReceiver);
         stopUsbTimer();
         super.onDestroy();

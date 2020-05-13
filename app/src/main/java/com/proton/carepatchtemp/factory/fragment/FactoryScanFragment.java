@@ -2,6 +2,7 @@ package com.proton.carepatchtemp.factory.fragment;
 
 import android.content.Intent;
 import android.databinding.Observable;
+import android.hardware.usb.UsbDevice;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,6 +45,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+
+import okhttp3.internal.Util;
 
 /**
  * 扫描页面
@@ -253,54 +256,88 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
                 }
             }
         });
+        List<ListItem> usbDeviceList = Utils.fetchUsbDeviceInfos();
+
+        if (null == usbDeviceList || usbDeviceList.size() == 0) {
+            BlackToast.show("设备列表为空，没有可用串口设备");
+            return;
+        }
+        //可用的串口设备
+        ListItem idleItem;
+        List<MeasureViewModel> allMeasureViewModelList = Utils.getAllMeasureViewModelList();
+
+        if (allMeasureViewModelList == null || allMeasureViewModelList.size() == 0) {
+            idleItem = usbDeviceList.get(0);
+        } else {
+            //遍历
+            idleItem = fetchIdleItem(patchMacaddress);
+        }
+
+        if (idleItem == null) {
+            BlackToast.show("没有找到可用串口设备");
+            return;
+        } else {
+            Logger.w(String.format("使用%s串口进行连接设备", idleItem.device.getDeviceId()));
+        }
         viewModel.connectStatus.set(1);
         viewModel.setActivity(getActivity());
-
-        List<MeasureViewModel> allMeasureViewModelList = Utils.getAllMeasureViewModelList();
-        List<ListItem> usbDeviceList = Utils.fetchUsbDeviceInfos();
-        int idleDeviceId = 0;
-        int idlePort = 0;
-        for (int i = 0; i < usbDeviceList.size(); i++) {
-            int deviceId = usbDeviceList.get(i).device.getDeviceId();
-            int port = usbDeviceList.get(i).port;
-
-            if (allMeasureViewModelList != null && allMeasureViewModelList.size() > 0) {
-
-                for (int j = 0; j < allMeasureViewModelList.size(); j++) {
-                    if (allMeasureViewModelList.get(j).usbDeviceId.get() == deviceId) {
-                        break;
-                    }
-                    if (j == allMeasureViewModelList.size() - 1) {
-                        idleDeviceId = deviceId;
-                        idlePort = port;
-                        break;
-                    }
-                }
-            } else {
-                idleDeviceId = deviceId;
-                idlePort = port;
-                break;
-            }
-
-            if (idleDeviceId > 0) {
-                Logger.w("可用串口设备id ：", idleDeviceId);
-                break;
-            }
-        }
-
-        idleDeviceId = usbDeviceList.get(0).device.getDeviceId();
-        idlePort = usbDeviceList.get(0).port;
-        Logger.w("可用串口设备id ：", idleDeviceId, " , port :", idlePort);
-
-        if (idleDeviceId == 0) {
-            BlackToast.show("没有可用串口...");
-        } else {
-            viewModel.usbDeviceId.set(idleDeviceId);
-            viewModel.usbPortNum.set(idlePort);
-            viewModel.connectDevice();
-        }
-
+        viewModel.usbDeviceId.set(idleItem.device.getDeviceId());
+        viewModel.usbPortNum.set(idleItem.port);
+        viewModel.connectDevice();
     }
+
+    /**
+     * 获取处于空闲状态的usbDevice设备（没有被其他贴占用的设备）,
+     * 前提条件：此方法调用的前提是存在usb设备，并且measureViewModel也不能为空
+     */
+    private ListItem fetchIdleItem(String patchMac) {
+        Logger.w("开始查找可用串口设备。。。");
+        ListItem listItem = null;
+        List<ListItem> deviceList = Utils.fetchUsbDeviceInfos();
+//        MeasureViewModel patchMeasureViewModel = Utils.getMeasureViewModel(patchMac);
+        List<MeasureViewModel> allMeasureViewModelList = Utils.getAllMeasureViewModelList();
+
+        if (deviceList == null || deviceList.size() == 0) {
+            Logger.w("usb设备列表为空");
+            return null;
+        }
+
+        //循环遍历usb设备列表
+        for (int i = 0; i < deviceList.size(); i++) {
+            ListItem tempItem = deviceList.get(i);
+            Logger.w(String.format("开始检测设备%s是否可用", tempItem.device.getDeviceId()));
+            //遍历measureViewModel查看此设备是否已经使用
+            for (int j = 0; j < allMeasureViewModelList.size(); j++) {
+                MeasureViewModel measureViewModel = allMeasureViewModelList.get(j);
+                int lockedDeviceId = measureViewModel.usbDeviceId.get();
+
+                if (lockedDeviceId == tempItem.device.getDeviceId()) {
+                    if (patchMac.equalsIgnoreCase(measureViewModel.patchMacaddress.get())) {
+                        listItem = tempItem;
+                        Logger.w(String.format("此设备%s处于空闲状态，可以使用", tempItem.device.getDeviceId()));
+                        break;
+                    }else {
+                        Logger.w(String.format("此设备%s正在使用", lockedDeviceId));
+                    }
+                    //此设备正在使用
+                    break;
+                }
+
+                if (j == allMeasureViewModelList.size() - 1) {
+                    //此设备处于空闲状态，可以使用
+                    Logger.w(String.format("此设备%s处于空闲状态，可以使用", tempItem.device.getDeviceId()));
+                    listItem = tempItem;
+                }
+            }
+
+            if (listItem != null) {
+                Logger.w("找到可用设备，跳出循环");
+                break;
+            }
+        }
+        return listItem;
+    }
+
 
     /**
      * 连接信号最好的20个贴

@@ -444,7 +444,7 @@ public class MeasureScanDeviceFragment extends BaseFragment<FragmentMeasureScanD
         binding.idScanDevice.setText(R.string.string_searching);
         BleConnector.scanDevice(mScanListener);
 
-        
+
     }
 
     private void stopSearch(boolean showEmpty) {
