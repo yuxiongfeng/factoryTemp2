@@ -19,12 +19,11 @@ import com.proton.carepatchtemp.net.bean.MessageEvent;
 import com.proton.carepatchtemp.utils.EventBusManager;
 import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
+import com.proton.temp.connector.at.AtConnector;
 import com.proton.temp.connector.bluetooth.BleConnector;
 import com.wms.ble.utils.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +44,10 @@ public class FactoryMeasureFragment extends BaseFragment<FragmentFactoryMeasureL
      * fragment的标识，默认为第一次测温
      */
     private String fragment_tag = "factory_measure1";
+    /**
+     * 是否是第二次测温
+     */
+    private boolean isSecondMeasure;
 
     public static FactoryMeasureFragment newInstance() {
 
@@ -57,9 +60,9 @@ public class FactoryMeasureFragment extends BaseFragment<FragmentFactoryMeasureL
     public void setFragment_tag(String fragment_tag) {
         this.fragment_tag = fragment_tag;
         if (fragment_tag.equalsIgnoreCase("factory_measure1")) {
-            factoryMeasureAdapter.setIsSecondMeasure(false);
+            isSecondMeasure=false;
         } else {
-            factoryMeasureAdapter.setIsSecondMeasure(true);
+            isSecondMeasure=true;
         }
     }
 
@@ -89,6 +92,7 @@ public class FactoryMeasureFragment extends BaseFragment<FragmentFactoryMeasureL
         super.initView();
         binding.idRecyclerview.setLayoutManager(new LinearLayoutManager(mContext));
         factoryMeasureAdapter = new FactoryMeasureAdapter(mContext, datum);
+        factoryMeasureAdapter.setIsSecondMeasure(isSecondMeasure);
         binding.idRecyclerview.setAdapter(factoryMeasureAdapter);
 
         //点击item稳定按钮，更新右上角“下一步”的点击状态，保存相关数据
@@ -195,12 +199,12 @@ public class FactoryMeasureFragment extends BaseFragment<FragmentFactoryMeasureL
     public void disconnect(String mac) {
         Logger.w("断开前measureViewModel size is : ", Utils.getAllMeasureViewModel().size());
         MeasureViewModel measureViewModel = Utils.getMeasureViewmodel(mac);
-        BleConnector bleConnector = (BleConnector) Utils.getMeasureViewmodel(mac).getConnectorManager().getmConnector();
-        if (bleConnector == null) {
+        AtConnector atConnector = (AtConnector) Utils.getMeasureViewmodel(mac).getConnectorManager().getmConnector();
+        if (atConnector == null) {
             return;
         }
         //写入ff  自动关机体温贴
-        bleConnector.calibrateTemp("ff");
+//        atConnector.calibrateTemp("ff");
         mHandler.postDelayed(() -> {
             measureViewModel.disConnect();
             Utils.clearMeasureViewModel(measureViewModel.patchMacaddress.get());
@@ -216,6 +220,5 @@ public class FactoryMeasureFragment extends BaseFragment<FragmentFactoryMeasureL
 
         }, 200);
     }
-
 
 }

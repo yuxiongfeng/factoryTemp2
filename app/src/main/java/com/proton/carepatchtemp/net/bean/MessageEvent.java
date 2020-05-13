@@ -247,6 +247,10 @@ public class MessageEvent {
         QUALIFICATION_REFRESH,
 
         /**
+         * usb权限，打开串口必要此权限
+         */
+        USB_PERMISSION,
+        /**
          * 串口设备插入
          */
         USB_ATTACH,

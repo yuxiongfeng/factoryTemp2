@@ -10,6 +10,13 @@ package com.proton.temp.connector.at.instruction;
 public interface IDeviceInstruction {
 
     /**
+     * 验证串口是否可用
+     *
+     * @return
+     */
+//    String verifyPort();
+
+    /**
      * 查询当前是主机模式还是从机模式
      *
      * @return

@@ -28,11 +28,14 @@ import com.proton.carepatchtemp.utils.Settings;
 import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.viewmodel.BaseViewModel;
 import com.proton.temp.connector.TempConnectorManager;
+import com.proton.temp.connector.at.AtConnector;
+import com.proton.temp.connector.at.interfaces.PortConnectListener;
 import com.proton.temp.connector.bean.ConnectionType;
 import com.proton.temp.connector.bean.DeviceType;
 import com.proton.temp.connector.bean.TempDataBean;
 import com.proton.temp.connector.interfaces.ConnectStatusListener;
 import com.proton.temp.connector.interfaces.ConnectionTypeListener;
+import com.proton.temp.connector.interfaces.Connector;
 import com.proton.temp.connector.interfaces.DataListener;
 import com.wms.logger.Logger;
 import com.wms.utils.CommonUtils;
@@ -446,10 +449,34 @@ public class MeasureViewModel extends BaseViewModel {
             getConnectorManager().setConnectionType(ConnectionType.AT);
         }
 
-        getConnectorManager()
-                .setReconnectCount(retryCount)
-                .setEnableCacheTemp(false)
-                .connect(mConnectorListener, mDataListener, true);
+        if (getConnectType() == ConnectionType.AT) {
+            //打开串口
+            AtConnector atConnector = (AtConnector) getConnectorManager().getmConnector();
+            atConnector.setPortConnectListener(new PortConnectListener() {
+                @Override
+                public void onConnectSuccess() {
+                    super.onConnectSuccess();
+                    Logger.w("串口打开成功，可以进行设备连接了,current thread is :",Thread.currentThread().getName());
+                    getConnectorManager()
+                            .setReconnectCount(retryCount)
+                            .setEnableCacheTemp(false)
+                            .connect(mConnectorListener, mDataListener, true);
+                }
+
+                @Override
+                public void onConnectFaild(String msg) {
+                    super.onConnectFaild(msg);
+                    Logger.w("串口打开失败，再次尝试打开串口。。。");
+                    atConnector.openSerialPort();
+                }
+            });
+            atConnector.openSerialPort();
+        } else {
+            getConnectorManager()
+                    .setReconnectCount(retryCount)
+                    .setEnableCacheTemp(false)
+                    .connect(mConnectorListener, mDataListener, true);
+        }
     }
 
 

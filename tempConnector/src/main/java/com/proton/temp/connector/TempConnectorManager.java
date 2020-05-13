@@ -221,18 +221,6 @@ public class TempConnectorManager {
         }
     };
 
-    private PortConnectListener portConnectListener=new PortConnectListener(){
-        @Override
-        public void onConnectSuccess() {
-            super.onConnectSuccess();
-        }
-
-        @Override
-        public void onConnectFaild(String msg) {
-            super.onConnectFaild(msg);
-        }
-    };
-
     /**
      * 算法状态回调
      */
@@ -460,10 +448,6 @@ public class TempConnectorManager {
                 break;
             case AT:
                 mConnector = new AtConnector(activity, mContext, deviceId, portNum);
-                if (!((AtConnector) mConnector).isPortConnected()) {
-                    mHandler.post(() -> ((AtConnector) mConnector).openSerialPort());
-                    ((AtConnector) mConnector).setPortConnectListener(portConnectListener);
-                }
                 break;
         }
         doConnectionTypeCallback();

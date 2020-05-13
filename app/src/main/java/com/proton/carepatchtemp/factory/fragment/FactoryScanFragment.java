@@ -1,10 +1,7 @@
 package com.proton.carepatchtemp.factory.fragment;
 
-import android.content.Context;
 import android.content.Intent;
 import android.databinding.Observable;
-import android.hardware.usb.UsbDevice;
-import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,8 +9,6 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
-import com.hoho.android.usbserial.driver.UsbSerialDriver;
-import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.proton.carepatchtemp.R;
 import com.proton.carepatchtemp.activity.common.GlobalWebActivity;
 import com.proton.carepatchtemp.bean.MeasureBean;
@@ -34,7 +29,6 @@ import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.view.WarmDialog;
 import com.proton.carepatchtemp.view.recyclerheader.HeaderAndFooterWrapper;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
-import com.proton.temp.connector.at.CustomProber;
 import com.proton.temp.connector.bean.DeviceBean;
 import com.proton.temp.connector.bluetooth.BleConnector;
 import com.proton.temp.connector.bluetooth.callback.OnScanListener;
@@ -263,9 +257,7 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
         viewModel.setActivity(getActivity());
 
         List<MeasureViewModel> allMeasureViewModelList = Utils.getAllMeasureViewModelList();
-        Logger.w("measureViewModel size is : ",allMeasureViewModelList.size(),"deviceId is : ",allMeasureViewModelList.get(0).deviceId.get());
         List<ListItem> usbDeviceList = Utils.fetchUsbDeviceInfos();
-
         int idleDeviceId = 0;
         int idlePort = 0;
         for (int i = 0; i < usbDeviceList.size(); i++) {
@@ -278,13 +270,13 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
                     if (allMeasureViewModelList.get(j).usbDeviceId.get() == deviceId) {
                         break;
                     }
-                    if (j == allMeasureViewModelList.size()) {
+                    if (j == allMeasureViewModelList.size() - 1) {
                         idleDeviceId = deviceId;
                         idlePort = port;
                         break;
                     }
                 }
-            }else {
+            } else {
                 idleDeviceId = deviceId;
                 idlePort = port;
                 break;
@@ -296,7 +288,11 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
             }
         }
 
-        if (idleDeviceId == 0 || idlePort == 0) {
+        idleDeviceId = usbDeviceList.get(0).device.getDeviceId();
+        idlePort = usbDeviceList.get(0).port;
+        Logger.w("可用串口设备id ：", idleDeviceId, " , port :", idlePort);
+
+        if (idleDeviceId == 0) {
             BlackToast.show("没有可用串口...");
         } else {
             viewModel.usbDeviceId.set(idleDeviceId);
@@ -305,7 +301,6 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
         }
 
     }
-
 
     /**
      * 连接信号最好的20个贴
@@ -373,6 +368,14 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
     @Override
     public void onMessageEvent(MessageEvent event) {
         super.onMessageEvent(event);
+        if (event.getEventType() == MessageEvent.EventType.USB_PERMISSION) {
+            Boolean granted = (Boolean) event.getObject();
+            if (granted) {//usb授权成功,重连设备
+            } else {
+                BlackToast.show("usb授权失败,请重试");
+            }
+
+        }
     }
 
     /**

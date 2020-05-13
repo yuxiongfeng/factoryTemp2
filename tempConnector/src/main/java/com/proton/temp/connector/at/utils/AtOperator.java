@@ -16,7 +16,7 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.proton.temp.connector.at.CustomProber;
-import com.proton.temp.connector.at.UsbPermission;
+//import com.proton.temp.connector.at.UsbPermission;
 import com.proton.temp.connector.at.instruction.AtInstruction;
 import com.proton.temp.connector.at.instruction.HmUUID;
 import com.proton.temp.connector.at.instruction.IDeviceInstruction;
@@ -44,11 +44,11 @@ import java.util.concurrent.Executors;
  */
 public class AtOperator implements SerialInputOutputManager.Listener {
 
-    public static final String INTENT_ACTION_GRANT_USB = "com.at.operator.grant.usb";
+    public static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
 
     private Activity activity;
     private Context context;
-    private UsbPermission usbPermission = UsbPermission.Unknown;
+//    private UsbPermission usbPermission = UsbPermission.Unknown;
 
     private boolean portConnected = false;
     private int deviceId, portNum, baudRate;
@@ -190,6 +190,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
         Logger.w("查看当前role模式 ： ", isRoleMaster ? "主模式" : "从模式");
         currentInstruction = atInstruction.queryRole();
         currentInstructionType = InstructionType.ROLE;
+        Logger.w("查询从模式指令:", currentInstruction);
         send(currentInstruction);
     }
 
@@ -211,7 +212,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
     /**
      * 连接设备
-     *
      */
     public void connectDevice() {
         Logger.w(String.format("开始连接,patchType: %s ,patchMac : %s ", patchType, patchMac));
@@ -297,6 +297,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      * 关闭串口
      */
     public void disConnect() {
+        Logger.w("手动断开设备。。。");
         isManualDisconnect = true;
         if (portConnected) {
             currentInstruction = atInstruction.disconnectDevice();
@@ -319,6 +320,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
             return;
         }
         String newData = sb.toString().replaceAll("\r\n", "");
+        Logger.w("newData is : ", newData);
 
         //当前指令不为设备连接，但是返回了OK+LOST，表示设备异常中断
         if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
@@ -527,7 +529,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     public void openSerialPort() {
         Logger.w("正在打开串口 , deviceId is :", deviceId);
-        if (usbPermission == UsbPermission.Unknown || usbPermission == UsbPermission.Granted) {
             UsbDevice device = null;
             UsbManager usbManager = (UsbManager) activity.getSystemService(Context.USB_SERVICE);
             for (UsbDevice v : usbManager.getDeviceList().values())
@@ -550,13 +551,18 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 return;
             }
             usbSerialPort = driver.getPorts().get(portNum);
-            UsbDeviceConnection usbConnection = usbManager.openDevice(driver.getDevice());
-            if (usbConnection == null && usbPermission == UsbPermission.Unknown && !usbManager.hasPermission(driver.getDevice())) {
-                usbPermission = UsbPermission.Requested;
-                PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(activity, 0, new Intent(INTENT_ACTION_GRANT_USB), 0);
+
+            UsbDeviceConnection usbConnection;
+            if (usbManager.hasPermission(driver.getDevice())) {
+                Logger.w("已有usb权限");
+                usbConnection = usbManager.openDevice(driver.getDevice());
+            } else {
+                Logger.w("没有usb权限");
+                PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(activity, 0, new Intent(ACTION_USB_PERMISSION), 0);
                 usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
                 return;
             }
+
             if (usbConnection == null) {
                 if (!usbManager.hasPermission(driver.getDevice()))
                     portConnectListener.onConnectFaild("connection failed: permission denied");
@@ -573,16 +579,12 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     Executors.newSingleThreadExecutor().submit(usbIoManager);
                 }
                 portConnected = true;
-                portConnectListener.onConnectSuccess();
                 Logger.w("串口打开成功。。。");
-                if (isReconnect) {
-                    connectDevice();
-                }
+                portConnectListener.onConnectSuccess();
             } catch (Exception e) {
                 portConnectListener.onConnectFaild("connection failed: " + e.getMessage());
                 closeSerialPort();
             }
-        }
     }
 
     /**

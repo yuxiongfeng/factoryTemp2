@@ -24,6 +24,7 @@ import com.proton.carepatchtemp.utils.BlackToast;
 import com.proton.carepatchtemp.utils.EventBusManager;
 import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
+import com.proton.temp.connector.at.AtConnector;
 import com.proton.temp.connector.bluetooth.BleConnector;
 import com.wms.ble.utils.Logger;
 
@@ -229,9 +230,9 @@ public class QualificationFragment extends BaseFragment<FragmentQualificationLay
      */
     private void disconnect(String mac,boolean hasNext) {
         MeasureViewModel measureViewModel = Utils.getMeasureViewmodel(mac);
-        BleConnector bleConnector = (BleConnector) Utils.getMeasureViewmodel(mac).getConnectorManager().getmConnector();
+        AtConnector atConnector = (AtConnector) Utils.getMeasureViewmodel(mac).getConnectorManager().getmConnector();
         //写入ff  自动关机体温贴
-        bleConnector.calibrateTemp("ff");
+//        bleConnector.calibrateTemp("ff");
         mHandler.postDelayed(new Runnable() {
             @Override
             public void run() {

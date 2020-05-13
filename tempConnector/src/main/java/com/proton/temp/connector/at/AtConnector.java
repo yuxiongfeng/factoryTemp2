@@ -6,7 +6,6 @@ import android.text.TextUtils;
 
 import com.proton.temp.connector.at.interfaces.PortConnectListener;
 import com.proton.temp.connector.at.utils.AtOperator;
-import com.proton.temp.connector.bluetooth.utils.BleUtils;
 import com.proton.temp.connector.interfaces.ConnectStatusListener;
 import com.proton.temp.connector.interfaces.Connector;
 import com.proton.temp.connector.interfaces.DataListener;
@@ -65,9 +64,9 @@ public class AtConnector implements Connector {
             throw new NullPointerException("patchMac is null,please set first!!!");
         }
         Logger.w("connect mac is : ", patchMac);
-        atOperator.connectDevice();
         atOperator.setPatchType(patchType);
         atOperator.setPatchMac(patchMac);
+        atOperator.connectDevice();
     }
 
     @Override
