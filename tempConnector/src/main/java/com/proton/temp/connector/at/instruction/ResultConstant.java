@@ -37,6 +37,6 @@ public class ResultConstant {
     public static final String NOTIFY_SUCCESS = "OK+DATA-OK";
     public static final String NOTIFY_OFF = "OK+DATA-OK";
 
-    public static final String SET_WAY = "OK+SEND-OK";
+    public static final String WRITE_DATA_PREPARE = "OK+SEND-OK";
 
 }

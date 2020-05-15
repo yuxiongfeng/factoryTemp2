@@ -269,7 +269,7 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
         if (allMeasureViewModelList == null || allMeasureViewModelList.size() == 0) {
             idleItem = usbDeviceList.get(0);
         } else {
-            //遍历
+            //获取可用的串口设备
             idleItem = fetchIdleItem(patchMacaddress);
         }
 
@@ -294,7 +294,6 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
         Logger.w("开始查找可用串口设备。。。");
         ListItem listItem = null;
         List<ListItem> deviceList = Utils.fetchUsbDeviceInfos();
-//        MeasureViewModel patchMeasureViewModel = Utils.getMeasureViewModel(patchMac);
         List<MeasureViewModel> allMeasureViewModelList = Utils.getAllMeasureViewModelList();
 
         if (deviceList == null || deviceList.size() == 0) {
@@ -316,7 +315,7 @@ public class FactoryScanFragment extends BaseFragment<FragmentMeasureScanDeviceB
                         listItem = tempItem;
                         Logger.w(String.format("此设备%s处于空闲状态，可以使用", tempItem.device.getDeviceId()));
                         break;
-                    }else {
+                    } else {
                         Logger.w(String.format("此设备%s正在使用", lockedDeviceId));
                     }
                     //此设备正在使用

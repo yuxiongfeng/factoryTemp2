@@ -48,7 +48,6 @@ public class AtConnector implements Connector {
         this.patchMac = mac;
     }
 
-
     @Override
     public void connect() {
         connect(null, null);
@@ -77,24 +76,6 @@ public class AtConnector implements Connector {
     @Override
     public boolean isConnected() {
         return null == atOperator ? false : atOperator.isConnected();
-    }
-
-    /**
-     * 串口是否可用
-     *
-     * @return
-     */
-    public boolean isPortConnected() {
-        return null == atOperator ? false : atOperator.isPortConnected();
-    }
-
-    /**
-     * 关闭串口
-     */
-    public void closePort() {
-        if (atOperator != null) {
-            atOperator.closeSerialPort();
-        }
     }
 
     @Override

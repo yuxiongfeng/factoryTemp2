@@ -17,7 +17,7 @@ import static com.proton.temp.connector.at.utils.AtOperator.ACTION_USB_PERMISSIO
  * @Author: yxf
  * @CreateDate: 2020/5/12 18:11
  * @UpdateUser: yxf
- * @UpdateDate: 2020/5/12 18:11
+ * @UpdateDate: 2020/5/12 18:11at
  */
 public class UsbAttachReceiver extends BroadcastReceiver {
 

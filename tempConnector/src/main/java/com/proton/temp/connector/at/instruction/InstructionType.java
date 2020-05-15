@@ -8,13 +8,47 @@ package com.proton.temp.connector.at.instruction;
  * @UpdateDate: 2020/5/7 11:17
  */
 public enum InstructionType {
-    AT,
+    /**
+     * 准备工作
+     */
+    PREPARE,
+    /**
+     * 选择主从模式（设置成主模式）
+     */
     ROLE,
+    /**
+     * 选择手动或自动连接模式（需要设置成手动模式）
+     */
     IMME,
-//    DISC,
+    /**
+     * 连接准备
+     */
+    /**
+     * 连接设备
+     */
     COON,
+    /**
+     * 读取serial和version
+     */
     READ,
+    /**
+     * 订阅温度
+     */
     NOTIFY,
-    SET_WAY,
+    /**
+     * 写入前准备
+     */
+    WRITE_DATA_PREPARE,
+    /**
+     * 写入温度
+     */
+    WRITE_DATA,
+    /**
+     * 断开连接
+     */
+    DISCONNECT,
+    /**
+     * 默认值
+     */
     NONE
 }

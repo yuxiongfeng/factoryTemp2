@@ -14,7 +14,7 @@ public interface IDeviceInstruction {
      *
      * @return
      */
-//    String verifyPort();
+    String connectPrepare();
 
     /**
      * 查询当前是主机模式还是从机模式

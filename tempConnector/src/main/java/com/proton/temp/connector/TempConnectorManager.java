@@ -668,7 +668,7 @@ public class TempConnectorManager {
 
         final List<ConnectStatusListener> listeners = new ArrayList<>(connectStatusListeners);
 
-        if (isFirst) {
+/*        if (isFirst) {
             if (connectStatus == 1) {
                 for (ConnectStatusListener listener : listeners) {
                     listener.showBeforeMeasureDisconnect();
@@ -679,7 +679,7 @@ public class TempConnectorManager {
                 }
             }
             isFirst = false;
-        }
+        }*/
 
 
         for (ConnectStatusListener listener : listeners) {

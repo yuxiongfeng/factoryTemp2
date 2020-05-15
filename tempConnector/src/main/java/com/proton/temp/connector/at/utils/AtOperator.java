@@ -106,16 +106,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     private int patchType;
 
     /**
-     * 重连标识
-     */
-    private boolean isReconnect = true;
-
-    /**
-     * 是否是主动断开
-     */
-    private boolean isManualDisconnect;
-
-    /**
      * 是否是主模式
      */
     private boolean isRoleMaster;
@@ -123,6 +113,11 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      * 是否是手动模式
      */
     private boolean isImmeManual;
+
+    /**
+     * 连接准备
+     */
+    private boolean prepare;
 
 
     public AtOperator(Activity activity, Context context, int deviceId, int portNum, int baudRate, boolean withIoManager) {
@@ -212,47 +207,37 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
     /**
      * 连接设备
+     * 1.判断串口是否打开
+     * 2.连接准备是否完成（成功发送"AT"指令）
+     * 3.开始建立连接
      */
     public void connectDevice() {
-        Logger.w(String.format("开始连接,patchType: %s ,patchMac : %s ", patchType, patchMac));
         if (!checkPortOpen()) {
             Logger.w("串口未开启");
             return;
         }
-        connectStatus = 1;
-        currentInstruction = atInstruction.connectDevice(patchType, patchMac);
-        currentInstructionType = InstructionType.COON;
+        //连接之前确保先输入AT，也可以说是connectPrepared
+        if (!prepare) {
+            Logger.w("AT初始化准备。。。");
+            currentInstruction = atInstruction.connectPrepare();
+            currentInstructionType = InstructionType.PREPARE;
+            send(currentInstruction);
+            return;
+        }
+
+        //验证串口是否是:"主模式"和"手动连接模式"
         if (!isRoleMaster || !isImmeManual) {
             isRoleMaster();
         } else {
-            Logger.w("connect currentInstruction is : ", currentInstruction);
+            Logger.w(String.format("开始连接,patchType: %s ,patchMac : %s ", patchType, patchMac));
+            connectStatus = 1;
+            currentInstruction = atInstruction.connectDevice(patchType, patchMac);
+            currentInstructionType = InstructionType.COON;
+            Logger.w("连接指令:", currentInstruction);
             send(currentInstruction);
+            //重置连接准备状态，方便重连时候调用
+            prepare = false;
         }
-    }
-
-    /**
-     * 重连：连接失败、异常断开时候重连，主动断开设备不重连
-     * ①首先确定断开设备:输入AT指令
-     * ②重启串口
-     * ③发起连接
-     */
-    private void reconnectDevice() {
-        isReconnect = true;
-        connectStatus = 1;
-        //先断开连接，输入指令AT
-        currentInstruction = atInstruction.disconnectDevice();
-        send(currentInstruction);
-    }
-
-    /**
-     * 重启串口
-     */
-    private void resetSerialPort() {
-        Logger.w("重启串口。。。");
-        //关闭串口
-        closeSerialPort();
-        //打开串口
-        mHandler.postDelayed(() -> openSerialPort(), 200);
     }
 
     /**
@@ -284,11 +269,13 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     private void subscribeTemp() {
         if (!checkPortOpen()) {
+            Logger.w("串口未开启");
             return;
         }
         isFirstArrive = true;
         currentInstruction = atInstruction.notifyCharacteristic(HmUUID.CHARACTOR_TEMP.getCharacteristicAlias());
         currentInstructionType = InstructionType.NOTIFY;
+        Logger.w("开始订阅温度。。。");
         send(currentInstruction);
     }
 
@@ -298,10 +285,9 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     public void disConnect() {
         Logger.w("手动断开设备。。。");
-        isManualDisconnect = true;
         if (portConnected) {
             currentInstruction = atInstruction.disconnectDevice();
-            currentInstructionType = InstructionType.AT;
+            currentInstructionType = InstructionType.DISCONNECT;
             //清空StringBuilder
             sb.delete(0, sb.length());
             send(currentInstruction);
@@ -322,48 +308,25 @@ public class AtOperator implements SerialInputOutputManager.Listener {
         String newData = sb.toString().replaceAll("\r\n", "");
         Logger.w("newData is : ", newData);
 
-        //当前指令不为设备连接，但是返回了OK+LOST，表示设备异常中断
-        if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
-
-            //主动断开设备成功
-            if (isManualDisconnect) {
-                connectStatusListener.onDisconnect(true);
-                closeSerialPort();
-            }
-            //连接失败,重连
-            if (currentInstructionType == InstructionType.COON) {
-                connectStatus = 3;
-                Logger.w("连接失败");
-                connectStatusListener.onConnectFaild();
-                reconnectDevice();
-            }
-            return;
-        }
-
         if (newData.startsWith(ResultConstant.COON_FAIL) || newData.endsWith(ResultConstant.COON_FAIL)) {
             connectStatus = 3;
             Logger.w("连接失败");
             if (connectStatusListener != null) {
                 connectStatusListener.onConnectFaild();
             }
-            reconnectDevice();
             return;
         }
 
         /**
-         * 以下用于判断是否是同一个指令的数据，因为数据都是通过字节来返回的，且不是一起返回，所以需要判断
+         * 注意判断条件，因为一个指令的数据是分多次返回的
          */
         switch (currentInstructionType) {
-            case AT:
-                if (newData.startsWith(ResultConstant.AT)) {
-                    if (isConnected()) {
-                        Logger.w("断开连接");
-                        connectStatusListener.onDisconnect(true);
-                    } else {
-                        Logger.w("验证串口是否打开 : ", portConnected);
-                    }
-                    connectStatus = 0;
+            case PREPARE://准备工作(验证串口是否可用，以及断开连接)
+                if (newData.startsWith(ResultConstant.AT) || newData.startsWith(ResultConstant.AT_LOST)) {
+                    prepare = true;
                     currentInstructionType = InstructionType.NONE;
+                    Logger.w("准备完成 newData is : ", newData);
+                    connectDevice();
                 }
                 break;
             case ROLE://主从模式
@@ -379,7 +342,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     isImmeManual();
                     Logger.w("role is : ", newData);
                 }
-
                 break;
             case IMME://手动，自动模式
                 if (newData.startsWith(ResultConstant.GET_ROLE_IMME_0)) {//自动模式，需要设置成手动模式
@@ -395,27 +357,26 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     connectDevice();
                 }
                 break;
-            case COON:
+
+            case COON://连接设备
                 if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
                     Logger.w("连接失败");
                     connectStatus = 3;
+                    connectStatusListener.onConnectFaild();
                 }
                 if (newData.startsWith(ResultConstant.COON_START) && newData.endsWith(ResultConstant.COON_END)) {
-                    Logger.w("coon is :", newData);
                     currentInstructionType = InstructionType.NONE;
-                    mHandler.postDelayed(() -> {
-                        Logger.w("开始获取serialNum...");
-                        fetchSerialNum();
-                    }, 500);
+                    //获取序列号，验证是否连接成功,此处必须做延时操作，否则获取不到序列号
+                    mHandler.postDelayed(() -> fetchSerialNum(), 200);
                 }
 
                 break;
-            case READ://没有标识
-                Logger.w("设备连接成功。。。");
+            case READ://读取序列号和版本号
                 if (!isConnected()) {
+                    Logger.w("设备连接成功");
                     connectStatus = 2;
+                    connectStatusListener.onConnectSuccess();
                 }
-
                 if (isReadSerialNum(currentInstruction) && newData.length() == getSerialNumLength()) {
                     Logger.w("serial is : ", newData);
                     dataListener.receiveSerial(newData);
@@ -429,7 +390,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 }
 
                 break;
-            case NOTIFY://没有标识
+            case NOTIFY://订阅温度
                 if (newData.length() == ResultConstant.NOTIFY_SUCCESS.length() && isFirstArrive) {
                     isFirstArrive = false;
                     Logger.w("温度订阅成功 ：", newData);
@@ -441,15 +402,34 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                         mHandler.post(() -> dataListener.receiveCurrentTemp(tempList));
                     }
                     sb.delete(0, sb.length());
+                } else if (newData.startsWith(ResultConstant.AT_LOST)) {//设备断点或异常断开
+                    Logger.w(String.format("设备异常%s", newData));
+                    connectStatus=1;
+                    connectStatusListener.onDisconnect(false);
+
                 } else if (newData.length() > 20) {
                     Logger.w("newData length 大于20，说明上个数据出现丢包，清空临时数据...");
                     sb.delete(0, sb.length());
                 }
                 break;
-            case SET_WAY:
-                if (newData.startsWith(ResultConstant.SET_WAY)) {
+            case WRITE_DATA_PREPARE://写入数据前准备
+                if (newData.startsWith(ResultConstant.WRITE_DATA_PREPARE)) {
                     Logger.w(newData);
                     currentInstructionType = InstructionType.NONE;
+                }
+                break;
+            case DISCONNECT://断开连接
+                if (newData.startsWith(ResultConstant.AT_LOST)) {//断开成功
+                    connectStatus = 0;
+                    connectStatusListener.onDisconnect(true);
+                    currentInstructionType = InstructionType.NONE;
+                }
+                break;
+            case NONE:
+                if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
+                    Logger.w(String.format("设备异常%s", newData));
+                    connectStatus=1;
+                    connectStatusListener.onDisconnect(false);//设备异常断开连接
                 }
                 break;
         }
@@ -499,7 +479,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     @Override
     public void onRunError(Exception e) {
         portConnectListener.onConnectFaild(e.getMessage());
-        closeSerialPort();
     }
 
     public boolean isConnected() {
@@ -529,66 +508,66 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     public void openSerialPort() {
         Logger.w("正在打开串口 , deviceId is :", deviceId);
-            UsbDevice device = null;
-            UsbManager usbManager = (UsbManager) activity.getSystemService(Context.USB_SERVICE);
-            for (UsbDevice v : usbManager.getDeviceList().values())
-                if (v.getDeviceId() == deviceId)
-                    device = v;
-            if (device == null) {
-                portConnectListener.onConnectFaild("connection failed: device not found");
-                return;
-            }
-            UsbSerialDriver driver = UsbSerialProber.getDefaultProber(context).probeDevice(device);
-            if (driver == null) {
-                driver = CustomProber.getCustomProber().probeDevice(device);
-            }
-            if (driver == null) {
-                portConnectListener.onConnectFaild("connection failed: no driver for device");
-                return;
-            }
-            if (driver.getPorts().size() < portNum) {
-                portConnectListener.onConnectFaild("connection failed: not enough ports at device");
-                return;
-            }
-            usbSerialPort = driver.getPorts().get(portNum);
+        UsbDevice device = null;
+        UsbManager usbManager = (UsbManager) activity.getSystemService(Context.USB_SERVICE);
+        for (UsbDevice v : usbManager.getDeviceList().values())
+            if (v.getDeviceId() == deviceId)
+                device = v;
+        if (device == null) {
+            portConnectListener.onConnectFaild("connection failed: device not found");
+            return;
+        }
+        UsbSerialDriver driver = UsbSerialProber.getDefaultProber(context).probeDevice(device);
+        if (driver == null) {
+            driver = CustomProber.getCustomProber().probeDevice(device);
+        }
+        if (driver == null) {
+            portConnectListener.onConnectFaild("connection failed: no driver for device");
+            return;
+        }
+        if (driver.getPorts().size() < portNum) {
+            portConnectListener.onConnectFaild("connection failed: not enough ports at device");
+            return;
+        }
+        usbSerialPort = driver.getPorts().get(portNum);
 
-            UsbDeviceConnection usbConnection;
-            if (usbManager.hasPermission(driver.getDevice())) {
-                Logger.w("已有usb权限");
-                usbConnection = usbManager.openDevice(driver.getDevice());
-            } else {
-                Logger.w("没有usb权限");
-                PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(activity, 0, new Intent(ACTION_USB_PERMISSION), 0);
-                usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
-                return;
-            }
+        UsbDeviceConnection usbConnection;
+        if (usbManager.hasPermission(driver.getDevice())) {
+            Logger.w("已有usb权限");
+            usbConnection = usbManager.openDevice(driver.getDevice());
+        } else {
+            Logger.w("没有usb权限");
+            PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(activity, 0, new Intent(ACTION_USB_PERMISSION), 0);
+            usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
+            return;
+        }
 
-            if (usbConnection == null) {
-                if (!usbManager.hasPermission(driver.getDevice()))
-                    portConnectListener.onConnectFaild("connection failed: permission denied");
-                else
-                    portConnectListener.onConnectFaild("connection failed: open failed");
-                return;
-            }
+        if (usbConnection == null) {
+            if (!usbManager.hasPermission(driver.getDevice()))
+                portConnectListener.onConnectFaild("connection failed: permission denied");
+            else
+                portConnectListener.onConnectFaild("connection failed: open failed");
+            return;
+        }
 
-            try {
-                usbSerialPort.open(usbConnection);
-                usbSerialPort.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
-                if (withIoManager) {
-                    usbIoManager = new SerialInputOutputManager(usbSerialPort, this);
-                    Executors.newSingleThreadExecutor().submit(usbIoManager);
-                }
-                portConnected = true;
-                Logger.w("串口打开成功。。。");
-                portConnectListener.onConnectSuccess();
-            } catch (Exception e) {
-                portConnectListener.onConnectFaild("connection failed: " + e.getMessage());
-                closeSerialPort();
+        try {
+            usbSerialPort.open(usbConnection);
+            usbSerialPort.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            if (withIoManager) {
+                usbIoManager = new SerialInputOutputManager(usbSerialPort, this);
+                Executors.newSingleThreadExecutor().submit(usbIoManager);
             }
+            portConnected = true;
+            Logger.w("串口打开成功。。。");
+            portConnectListener.onConnectSuccess();
+        } catch (Exception e) {
+            portConnected=false;
+            portConnectListener.onConnectFaild("connection failed: " + e.getMessage());
+        }
     }
 
     /**
-     * 关闭串口
+     * 关闭串口,关闭之后需要重新插拔上电
      */
     public void closeSerialPort() {
         if (isPortConnected() || usbSerialPort == null) {

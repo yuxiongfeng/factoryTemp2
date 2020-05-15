@@ -861,8 +861,8 @@ public class BleConnector implements Connector {
         @Override
         public void onDeviceFound(ScanResult result) {
             byte[] scanRecord = result.getScanRecord();
-            String macaddress = result.getMacaddress();
-            Logger.w("scan mac : ",macaddress);
+//            String macaddress = result.getMacaddress();
+//            Logger.w("scan mac : ",macaddress);
             DeviceType type = BroadcastUtils.parseDeviceType(scanRecord);
             if (type != DeviceType.None) {
                 //解析mac地址，系统api拿到的mac地址和广播包的mac地址可能不一致(嵌入式问题)

@@ -170,14 +170,7 @@ public class SerialInputOutputManager implements Runnable {
         }
     }
 
-    private long lastTime = 0;
-
     private void step() {
-
-        long currentTime = System.currentTimeMillis();
-        Logger.w("interval time is :", currentTime - lastTime);
-        lastTime = currentTime;
-
         // Handle incoming data.
         int len = 0;
         try {

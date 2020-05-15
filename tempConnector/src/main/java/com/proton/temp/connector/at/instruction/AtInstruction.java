@@ -10,6 +10,11 @@ package com.proton.temp.connector.at.instruction;
 public class AtInstruction implements IDeviceInstruction {
 
     @Override
+    public String connectPrepare() {
+        return Constant.DISCONNECT_DEVICE;
+    }
+
+    @Override
     public String queryRole() {
         return Constant.QUERY_ROLE;
     }

@@ -10,6 +10,10 @@ package com.proton.temp.connector.at.instruction;
 public class Constant {
 
     /**
+     * 连接前准备工作
+     */
+    public static final String CONNECT_PREPARE = "AT";
+    /**
      * 查询模式
      */
     public static final String QUERY_ROLE = "AT+ROLE?";
