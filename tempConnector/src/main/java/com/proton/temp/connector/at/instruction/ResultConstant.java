@@ -39,4 +39,6 @@ public class ResultConstant {
 
     public static final String WRITE_DATA_PREPARE = "OK+SEND-OK";
 
+    public static final String SEND_INSTRUCTION_EOR="OK+SEND-EROK+LOST";
+
 }

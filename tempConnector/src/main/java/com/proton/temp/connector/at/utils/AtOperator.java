@@ -48,7 +48,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
     private Activity activity;
     private Context context;
-//    private UsbPermission usbPermission = UsbPermission.Unknown;
+
 
     private boolean portConnected = false;
     private int deviceId, portNum, baudRate;
@@ -310,6 +310,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
         if (newData.startsWith(ResultConstant.COON_FAIL) || newData.endsWith(ResultConstant.COON_FAIL)) {
             connectStatus = 3;
+            portConnected=false;
             Logger.w("连接失败");
             if (connectStatusListener != null) {
                 connectStatusListener.onConnectFaild();
@@ -362,6 +363,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
                     Logger.w("连接失败");
                     connectStatus = 3;
+                    portConnected=false;
                     connectStatusListener.onConnectFaild();
                 }
                 if (newData.startsWith(ResultConstant.COON_START) && newData.endsWith(ResultConstant.COON_END)) {
@@ -405,6 +407,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 } else if (newData.startsWith(ResultConstant.AT_LOST)) {//设备断点或异常断开
                     Logger.w(String.format("设备异常%s", newData));
                     connectStatus=1;
+                    portConnected=false;
                     connectStatusListener.onDisconnect(false);
 
                 } else if (newData.length() > 20) {
@@ -421,14 +424,16 @@ public class AtOperator implements SerialInputOutputManager.Listener {
             case DISCONNECT://断开连接
                 if (newData.startsWith(ResultConstant.AT_LOST)) {//断开成功
                     connectStatus = 0;
+                    portConnected=false;
                     connectStatusListener.onDisconnect(true);
                     currentInstructionType = InstructionType.NONE;
                 }
                 break;
             case NONE:
-                if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
+                if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)||newData.startsWith(ResultConstant.SEND_INSTRUCTION_EOR)) {
                     Logger.w(String.format("设备异常%s", newData));
                     connectStatus=1;
+                    portConnected=false;
                     connectStatusListener.onDisconnect(false);//设备异常断开连接
                 }
                 break;
