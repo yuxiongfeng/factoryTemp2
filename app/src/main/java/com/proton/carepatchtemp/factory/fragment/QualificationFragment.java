@@ -25,7 +25,6 @@ import com.proton.carepatchtemp.utils.EventBusManager;
 import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
 import com.proton.temp.connector.at.AtConnector;
-import com.proton.temp.connector.bluetooth.BleConnector;
 import com.wms.ble.utils.Logger;
 
 import org.litepal.LitePal;
@@ -232,21 +231,18 @@ public class QualificationFragment extends BaseFragment<FragmentQualificationLay
         MeasureViewModel measureViewModel = Utils.getMeasureViewmodel(mac);
         AtConnector atConnector = (AtConnector) Utils.getMeasureViewmodel(mac).getConnectorManager().getmConnector();
         //写入ff  自动关机体温贴
-//        bleConnector.calibrateTemp("ff");
-        mHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                measureViewModel.disConnect();
-                //删除measureViewModel
-                Utils.clearMeasureViewModel(measureViewModel.patchMacaddress.get());
-                //删除本地数据库数据
-                CalibrateBeanDao.deleteMonitorLitepalData(measureViewModel.patchMacaddress.get());
-                if (Utils.getAllMeasureViewModel().size() == 0) {
-                    EventBusManager.getInstance().post(new MessageEvent(MessageEvent.EventType.SWITCH_FACTORY_FRAGMENT, "factory_scan"));
-                }
-                if (!hasNext) {
-                    refresh();
-                }
+        atConnector.closeCarePatch();
+        mHandler.postDelayed(() -> {
+            measureViewModel.disConnect();
+            //删除measureViewModel
+            Utils.clearMeasureViewModel(measureViewModel.patchMacaddress.get());
+            //删除本地数据库数据
+            CalibrateBeanDao.deleteMonitorLitepalData(measureViewModel.patchMacaddress.get());
+            if (Utils.getAllMeasureViewModel().size() == 0) {
+                EventBusManager.getInstance().post(new MessageEvent(MessageEvent.EventType.SWITCH_FACTORY_FRAGMENT, "factory_scan"));
+            }
+            if (!hasNext) {
+                refresh();
             }
         }, 100);
     }

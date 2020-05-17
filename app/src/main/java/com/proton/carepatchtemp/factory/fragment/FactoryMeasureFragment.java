@@ -204,7 +204,7 @@ public class FactoryMeasureFragment extends BaseFragment<FragmentFactoryMeasureL
             return;
         }
         //写入ff  自动关机体温贴
-//        atConnector.calibrateTemp("ff");
+        atConnector.closeCarePatch();
         mHandler.postDelayed(() -> {
             measureViewModel.disConnect();
             Utils.clearMeasureViewModel(measureViewModel.patchMacaddress.get());

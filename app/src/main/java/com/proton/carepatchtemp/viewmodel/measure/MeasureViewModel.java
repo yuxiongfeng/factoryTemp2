@@ -449,34 +449,10 @@ public class MeasureViewModel extends BaseViewModel {
             getConnectorManager().setConnectionType(ConnectionType.AT);
         }
 
-        if (getConnectType() == ConnectionType.AT) {
-            //打开串口
-            AtConnector atConnector = (AtConnector) getConnectorManager().getmConnector();
-            atConnector.setPortConnectListener(new PortConnectListener() {
-                @Override
-                public void onConnectSuccess() {
-                    super.onConnectSuccess();
-                    Logger.w("串口打开成功，可以进行设备连接了,current thread is :",Thread.currentThread().getName());
-                    getConnectorManager()
-                            .setReconnectCount(retryCount)
-                            .setEnableCacheTemp(false)
-                            .connect(mConnectorListener, mDataListener, true);
-                }
-
-                @Override
-                public void onConnectFaild(String msg) {
-                    super.onConnectFaild(msg);
-                    Logger.w("串口打开失败，再次尝试打开串口。。。");
-                    atConnector.openSerialPort();
-                }
-            });
-            atConnector.openSerialPort();
-        } else {
-            getConnectorManager()
-                    .setReconnectCount(retryCount)
-                    .setEnableCacheTemp(false)
-                    .connect(mConnectorListener, mDataListener, true);
-        }
+        getConnectorManager()
+                .setReconnectCount(retryCount)
+                .setEnableCacheTemp(false)
+                .connect(mConnectorListener, mDataListener, true);
     }
 
 

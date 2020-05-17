@@ -40,10 +40,6 @@ public enum InstructionType {
      */
     WRITE_DATA_PREPARE,
     /**
-     * 写入温度
-     */
-    WRITE_DATA,
-    /**
      * 断开连接
      */
     DISCONNECT,

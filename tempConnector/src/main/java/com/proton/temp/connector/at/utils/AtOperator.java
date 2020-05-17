@@ -16,7 +16,6 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.proton.temp.connector.at.CustomProber;
-//import com.proton.temp.connector.at.UsbPermission;
 import com.proton.temp.connector.at.instruction.AtInstruction;
 import com.proton.temp.connector.at.instruction.HmUUID;
 import com.proton.temp.connector.at.instruction.IDeviceInstruction;
@@ -30,6 +29,7 @@ import com.proton.temp.connector.interfaces.DataListener;
 import com.wms.logger.Logger;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.Executors;
 
@@ -48,7 +48,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
     private Activity activity;
     private Context context;
-
 
     private boolean portConnected = false;
     private int deviceId, portNum, baudRate;
@@ -72,7 +71,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     private IDeviceInstruction atInstruction = new AtInstruction();
 
-    private PortConnectListener portConnectListener;
+    //    private PortConnectListener portConnectListener;
     private ConnectStatusListener connectStatusListener;
     private DataListener dataListener;
 
@@ -89,6 +88,11 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      * 0：未连接 1：连接中 2：已连接 3：连接失败
      */
     private int connectStatus = 0;
+
+    /**
+     * 正在连接的标志，防止重复发指令
+     */
+    private boolean isConnecting = false;
 
     /**
      * 订阅温度，首次返回的数据（OK+DATA-OK）
@@ -115,9 +119,19 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     private boolean isImmeManual;
 
     /**
-     * 连接准备
+     * 连接准备，发送“AT”用于验证串口是否可用，或者为了断掉上次的连接
      */
     private boolean prepare;
+
+    /**
+     * 要写入的数据
+     */
+    private String tHex;
+
+    /**
+     * 温度的缓存数据,大小为20个字节
+     */
+    private ByteBuffer byteBuffer = ByteBuffer.allocate(getTempDataLength());
 
 
     public AtOperator(Activity activity, Context context, int deviceId, int portNum, int baudRate, boolean withIoManager) {
@@ -139,15 +153,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
     public void setPatchType(int patchType) {
         this.patchType = patchType;
-    }
-
-    /**
-     * 设置打开串口的回调
-     *
-     * @param portConnectListener
-     */
-    public void setPortConnectListener(PortConnectListener portConnectListener) {
-        this.portConnectListener = portConnectListener;
     }
 
 
@@ -206,16 +211,38 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     }
 
     /**
+     * 连接前准备,打开串口
+     */
+
+    public void connectPrepare() {
+        if (isConnecting) {
+            Logger.w("正在连接中,请稍后。。。");
+            return;
+        }
+        isConnecting = true;
+        openSerialPort(new PortConnectListener() {
+            @Override
+            public void onConnectSuccess() {
+                super.onConnectSuccess();
+                connectDevice();
+            }
+
+            @Override
+            public void onConnectFaild(String msg) {
+                super.onConnectFaild(msg);
+                isConnecting = false;
+                connectPrepare();
+            }
+        });
+    }
+
+    /**
      * 连接设备
      * 1.判断串口是否打开
      * 2.连接准备是否完成（成功发送"AT"指令）
      * 3.开始建立连接
      */
     public void connectDevice() {
-        if (!checkPortOpen()) {
-            Logger.w("串口未开启");
-            return;
-        }
         //连接之前确保先输入AT，也可以说是connectPrepared
         if (!prepare) {
             Logger.w("AT初始化准备。。。");
@@ -244,9 +271,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      * 获取序列号
      */
     private void fetchSerialNum() {
-        if (!checkPortOpen()) {
-            return;
-        }
         currentInstruction = atInstruction.readCharacteristic(HmUUID.CHARACTOR_SERIAL_NUM.getCharacteristicAlias());
         currentInstructionType = InstructionType.READ;
         send(currentInstruction);
@@ -256,9 +280,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      * 获取版本号
      */
     private void fetchVersion() {
-        if (!checkPortOpen()) {
-            return;
-        }
         currentInstruction = atInstruction.readCharacteristic(HmUUID.CHARACTOR_VERSION.getCharacteristicAlias());
         currentInstructionType = InstructionType.READ;
         send(currentInstruction);
@@ -268,15 +289,31 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      * 订阅温度
      */
     private void subscribeTemp() {
-        if (!checkPortOpen()) {
-            Logger.w("串口未开启");
-            return;
-        }
         isFirstArrive = true;
         currentInstruction = atInstruction.notifyCharacteristic(HmUUID.CHARACTOR_TEMP.getCharacteristicAlias());
         currentInstructionType = InstructionType.NOTIFY;
         Logger.w("开始订阅温度。。。");
         send(currentInstruction);
+    }
+
+    /**
+     * 写入前准备
+     */
+    public void sendDataPrepare(String tHex) {
+        this.tHex = tHex;
+        currentInstruction = atInstruction.sendDataPrepare("WR", HmUUID.CHARACTOR_CACHE_TEMP_SEND.getCharacteristicAlias());
+        currentInstructionType = InstructionType.WRITE_DATA_PREPARE;
+        Logger.w("写入前准备。。。");
+        send(currentInstruction);
+    }
+
+    /**
+     * 写入数据,没有返回值
+     * 1.测试断开设备
+     */
+    private void writeData(String tHex) {
+        Logger.w("写入数据," + tHex);
+        send(tHex, true);
     }
 
     /**
@@ -310,8 +347,9 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
         if (newData.startsWith(ResultConstant.COON_FAIL) || newData.endsWith(ResultConstant.COON_FAIL)) {
             connectStatus = 3;
-            portConnected=false;
+            portConnected = false;
             Logger.w("连接失败");
+            isConnecting = false;
             if (connectStatusListener != null) {
                 connectStatusListener.onConnectFaild();
             }
@@ -327,7 +365,12 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     prepare = true;
                     currentInstructionType = InstructionType.NONE;
                     Logger.w("准备完成 newData is : ", newData);
-                    connectDevice();
+                    mHandler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            connectDevice();
+                        }
+                    }, 5000);
                 }
                 break;
             case ROLE://主从模式
@@ -363,7 +406,8 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
                     Logger.w("连接失败");
                     connectStatus = 3;
-                    portConnected=false;
+                    portConnected = false;
+                    isConnecting = false;
                     connectStatusListener.onConnectFaild();
                 }
                 if (newData.startsWith(ResultConstant.COON_START) && newData.endsWith(ResultConstant.COON_END)) {
@@ -379,61 +423,84 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     connectStatus = 2;
                     connectStatusListener.onConnectSuccess();
                 }
+                //获取序列号
                 if (isReadSerialNum(currentInstruction) && newData.length() == getSerialNumLength()) {
                     Logger.w("serial is : ", newData);
                     dataListener.receiveSerial(newData);
                     fetchVersion();
                 }
 
+                //获取版本号
                 if (isReadVersion(currentInstruction) && newData.length() == getHardVersionLength()) {
                     Logger.w("hardVersion is : ", newData);
                     dataListener.receiveHardVersion(newData);
+                    //订阅温度
                     subscribeTemp();
                 }
 
                 break;
             case NOTIFY://订阅温度
+                int position = byteBuffer.position();
+                int length = data.length;
+
+                Logger.w("byteBuffer position : ", position, " ,data length is :", length);
+
+                for (int i = 0; i < data.length; i++) {
+                    if (byteBuffer.position() < byteBuffer.capacity()) {
+                        byteBuffer.put(data[i]);
+                    }
+                }
+
                 if (newData.length() == ResultConstant.NOTIFY_SUCCESS.length() && isFirstArrive) {
                     isFirstArrive = false;
                     Logger.w("温度订阅成功 ：", newData);
                     sb.delete(0, sb.length());
+                    byteBuffer.clear();
                 } else if (newData.length() == getTempDataLength()) {
-                    List<TempDataBean> tempList = BleUtils.parseTempV1_5(newData);
+                    for (int i = 0; i < byteBuffer.array().length; i++) {
+                        Logger.w("打印byte值：", byteBuffer.get(i));
+                    }
+                    List<TempDataBean> tempList = BleUtils.parseTempV1_5(byteBuffer.array());
                     Logger.w("实时温度 size ：", tempList.size());
                     if (dataListener != null) {
                         mHandler.post(() -> dataListener.receiveCurrentTemp(tempList));
                     }
                     sb.delete(0, sb.length());
+                    byteBuffer.clear();
                 } else if (newData.startsWith(ResultConstant.AT_LOST)) {//设备断点或异常断开
                     Logger.w(String.format("设备异常%s", newData));
-                    connectStatus=1;
-                    portConnected=false;
+                    connectStatus = 1;
+//                    portConnected = false;
+                    isConnecting = false;
                     connectStatusListener.onDisconnect(false);
-
                 } else if (newData.length() > 20) {
                     Logger.w("newData length 大于20，说明上个数据出现丢包，清空临时数据...");
                     sb.delete(0, sb.length());
+                    byteBuffer.clear();
                 }
                 break;
             case WRITE_DATA_PREPARE://写入数据前准备
                 if (newData.startsWith(ResultConstant.WRITE_DATA_PREPARE)) {
-                    Logger.w(newData);
+                    Logger.w("写入准备成功，开始写入数据:", newData);
                     currentInstructionType = InstructionType.NONE;
+                    writeData(tHex);
                 }
                 break;
             case DISCONNECT://断开连接
                 if (newData.startsWith(ResultConstant.AT_LOST)) {//断开成功
                     connectStatus = 0;
-                    portConnected=false;
+                    portConnected = false;
+                    isConnecting = false;
                     connectStatusListener.onDisconnect(true);
                     currentInstructionType = InstructionType.NONE;
                 }
                 break;
             case NONE:
-                if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)||newData.startsWith(ResultConstant.SEND_INSTRUCTION_EOR)) {
+                if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST) || newData.startsWith(ResultConstant.SEND_INSTRUCTION_EOR)) {
                     Logger.w(String.format("设备异常%s", newData));
-                    connectStatus=1;
-                    portConnected=false;
+                    connectStatus = 1;
+                    portConnected = false;
+                    isConnecting = false;
                     connectStatusListener.onDisconnect(false);//设备异常断开连接
                 }
                 break;
@@ -473,7 +540,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     }
 
     /**
-     * 温度数据长度
+     * 温度数据字节数组长度
      *
      * @return
      */
@@ -483,7 +550,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
 
     @Override
     public void onRunError(Exception e) {
-        portConnectListener.onConnectFaild(e.getMessage());
+        Logger.w("串口异常：", e.getMessage());
     }
 
     public boolean isConnected() {
@@ -495,23 +562,9 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     }
 
     /**
-     * 检查串口是否打开
-     *
-     * @return
-     */
-    public boolean checkPortOpen() {
-        if (!isPortConnected()) {
-            mHandler.post(() -> openSerialPort());
-            return false;
-        } else {
-            return true;
-        }
-    }
-
-    /**
      * 连接串口
      */
-    public void openSerialPort() {
+    public boolean openSerialPort(PortConnectListener portConnectListener) {
         Logger.w("正在打开串口 , deviceId is :", deviceId);
         UsbDevice device = null;
         UsbManager usbManager = (UsbManager) activity.getSystemService(Context.USB_SERVICE);
@@ -520,7 +573,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 device = v;
         if (device == null) {
             portConnectListener.onConnectFaild("connection failed: device not found");
-            return;
+            return false;
         }
         UsbSerialDriver driver = UsbSerialProber.getDefaultProber(context).probeDevice(device);
         if (driver == null) {
@@ -528,11 +581,11 @@ public class AtOperator implements SerialInputOutputManager.Listener {
         }
         if (driver == null) {
             portConnectListener.onConnectFaild("connection failed: no driver for device");
-            return;
+            return false;
         }
         if (driver.getPorts().size() < portNum) {
             portConnectListener.onConnectFaild("connection failed: not enough ports at device");
-            return;
+            return false;
         }
         usbSerialPort = driver.getPorts().get(portNum);
 
@@ -544,7 +597,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
             Logger.w("没有usb权限");
             PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(activity, 0, new Intent(ACTION_USB_PERMISSION), 0);
             usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
-            return;
+            return false;
         }
 
         if (usbConnection == null) {
@@ -552,7 +605,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 portConnectListener.onConnectFaild("connection failed: permission denied");
             else
                 portConnectListener.onConnectFaild("connection failed: open failed");
-            return;
+            return false;
         }
 
         try {
@@ -565,16 +618,38 @@ public class AtOperator implements SerialInputOutputManager.Listener {
             portConnected = true;
             Logger.w("串口打开成功。。。");
             portConnectListener.onConnectSuccess();
+            return true;
         } catch (Exception e) {
-            portConnected=false;
+            portConnected = false;
             portConnectListener.onConnectFaild("connection failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void send(String str) {
+        //清空StringBuilder
+        sb.delete(0, sb.length());
+        send(str, false);
+    }
+
+    private void send(String str, boolean isHexString) {
+        try {
+            byte[] data;
+            if (isHexString) {
+                data = BleUtils.hexStringToBytes(str);
+            } else {
+                data = (str).getBytes();
+            }
+            usbSerialPort.write(data, WRITE_WAIT_MILLIS);
+        } catch (Exception e) {
+            onRunError(e);
         }
     }
 
     /**
-     * 关闭串口,关闭之后需要重新插拔上电
+     * 关闭串口,关闭之后需要重新插拔上电,不需要这个方法
      */
-    public void closeSerialPort() {
+    private void closeSerialPort() {
         if (isPortConnected() || usbSerialPort == null) {
             return;
         }
@@ -590,28 +665,5 @@ public class AtOperator implements SerialInputOutputManager.Listener {
         Logger.w("关闭串口");
     }
 
-    private void send(String str) {
-        //清空StringBuilder
-        sb.delete(0, sb.length());
-        send(str, false);
-    }
-
-    private void send(String str, boolean isHexString) {
-        if (!portConnected) {
-            portConnectListener.onConnectFaild("port not connected");
-            return;
-        }
-        try {
-            byte[] data;
-            if (isHexString) {
-                data = BleUtils.hexStringToBytes(str);
-            } else {
-                data = (str).getBytes();
-            }
-            usbSerialPort.write(data, WRITE_WAIT_MILLIS);
-        } catch (Exception e) {
-            onRunError(e);
-        }
-    }
 
 }

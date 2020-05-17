@@ -15,6 +15,7 @@ import com.proton.carepatchtemp.net.bean.MessageEvent;
 import com.proton.carepatchtemp.utils.EventBusManager;
 import com.proton.carepatchtemp.utils.Utils;
 import com.proton.carepatchtemp.viewmodel.measure.MeasureViewModel;
+import com.proton.temp.connector.at.AtConnector;
 import com.proton.temp.connector.bluetooth.BleConnector;
 import com.wms.logger.Logger;
 
@@ -117,19 +118,17 @@ public class CalibrateFragment extends BaseFragment<FragmentCalibrateLayoutBindi
             }
             return;
         }
-        BleConnector bleConnector = (BleConnector) measureViewModel.getConnectorManager().getmConnector();
+        AtConnector atConnector = (AtConnector) measureViewModel.getConnectorManager().getmConnector();
         Logger.w("校准值的十六进制：", CalibrateTableEnums.getCalibrateTByT(measureViewModel.calibration.get()).toString());
         String tHex = CalibrateTableEnums.getCalibrateTByT(measureViewModel.calibration.get()).gettHex();
-        bleConnector.calibrateTemp(tHex);
-        mHandler.postDelayed(new Runnable() {//写入的时候延时100ms刷新
-            @Override
-            public void run() {
-                measureViewModel.calibrationStatus.set(1);//设置为已校准
-                if (currentIndex < datum.size()) {
-                    calibratePatch(datum.get(currentIndex));
-                } else {
-                    EventBusManager.getInstance().post(new MessageEvent(MessageEvent.EventType.SWITCH_FACTORY_FRAGMENT, "factory_qualification"));
-                }
+        atConnector.calibrateTemp(tHex);
+        //写入的时候延时100ms刷新
+        mHandler.postDelayed(() -> {
+            measureViewModel.calibrationStatus.set(1);//设置为已校准
+            if (currentIndex < datum.size()) {
+                calibratePatch(datum.get(currentIndex));
+            } else {
+                EventBusManager.getInstance().post(new MessageEvent(MessageEvent.EventType.SWITCH_FACTORY_FRAGMENT, "factory_qualification"));
             }
         }, 100);
 

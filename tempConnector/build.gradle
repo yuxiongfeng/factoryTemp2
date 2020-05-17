@@ -51,6 +51,8 @@ dependencies {
     implementation project(':tempAlgorithm')
     //    api 'com.wms:ble:1.1.1-alpha5'
     api project(':ble')
+    implementation 'io.reactivex.rxjava2:rxjava:2.2.3'
+    implementation 'io.reactivex.rxjava2:rxandroid:2.1.0'
     implementation project(':usbSerialForAndroid')
 }
 
