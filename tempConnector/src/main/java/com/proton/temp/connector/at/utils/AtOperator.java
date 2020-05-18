@@ -31,6 +31,8 @@ import com.wms.logger.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Executors;
 
 
@@ -71,7 +73,6 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     private IDeviceInstruction atInstruction = new AtInstruction();
 
-    //    private PortConnectListener portConnectListener;
     private ConnectStatusListener connectStatusListener;
     private DataListener dataListener;
 
@@ -133,7 +134,15 @@ public class AtOperator implements SerialInputOutputManager.Listener {
      */
     private ByteBuffer byteBuffer = ByteBuffer.allocate(getTempDataLength());
 
+    /**
+     * 检测准备串口是否可用的定时器，不可用则重复发送“AT”
+     */
+    private Timer mCheckPrepareTimer;
 
+    /**
+     * 检测AT结果
+     */
+//    private boolean isOk;
     public AtOperator(Activity activity, Context context, int deviceId, int portNum, int baudRate, boolean withIoManager) {
         this.activity = activity;
         this.context = context;
@@ -245,10 +254,14 @@ public class AtOperator implements SerialInputOutputManager.Listener {
     public void connectDevice() {
         //连接之前确保先输入AT，也可以说是connectPrepared
         if (!prepare) {
+//            if (isOk) {
+//                isOk = false;
+//            }
             Logger.w("AT初始化准备。。。");
             currentInstruction = atInstruction.connectPrepare();
             currentInstructionType = InstructionType.PREPARE;
             send(currentInstruction);
+            checkPrepareStatus();
             return;
         }
 
@@ -343,7 +356,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
             return;
         }
         String newData = sb.toString().replaceAll("\r\n", "");
-        Logger.w("newData is : ", newData);
+        Logger.w("newData is : ", newData, " ,instructionType is :", currentInstructionType.name());
 
         if (newData.startsWith(ResultConstant.COON_FAIL) || newData.endsWith(ResultConstant.COON_FAIL)) {
             connectStatus = 3;
@@ -360,19 +373,18 @@ public class AtOperator implements SerialInputOutputManager.Listener {
          * 注意判断条件，因为一个指令的数据是分多次返回的
          */
         switch (currentInstructionType) {
-            case PREPARE://准备工作(验证串口是否可用，以及断开连接)
+
+            case PREPARE://准备工作(验证串口是否可用，以及断开连接,每次连接前都需要先输入AT，并且有成功返回后才可进行下一步，否则串口可能出现断电情况)
                 if (newData.startsWith(ResultConstant.AT) || newData.startsWith(ResultConstant.AT_LOST)) {
                     prepare = true;
                     currentInstructionType = InstructionType.NONE;
-                    Logger.w("准备完成 newData is : ", newData);
-                    mHandler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            connectDevice();
-                        }
-                    }, 5000);
+                    Logger.w("连接准备完成 , newData is : ", newData);
+                    //关掉检测AT是否发送成功的定时器
+                    clearTimer();
+                    connectDevice();
                 }
                 break;
+
             case ROLE://主从模式
                 if (newData.startsWith(ResultConstant.GET_ROLE_IMME_0)) {//从模式，需要设置成主模式
                     setRoleMaster();
@@ -385,8 +397,14 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     isRoleMaster = true;
                     isImmeManual();
                     Logger.w("role is : ", newData);
+                } else if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {//连接失败
+                    Logger.w("连接失败");
+                    connectStatus = 3;
+                    isConnecting = false;
+                    connectStatusListener.onConnectFaild();
                 }
                 break;
+
             case IMME://手动，自动模式
                 if (newData.startsWith(ResultConstant.GET_ROLE_IMME_0)) {//自动模式，需要设置成手动模式
                     setImmeManual();
@@ -399,6 +417,11 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     isImmeManual = true;
                     Logger.w("imme is : ", newData);
                     connectDevice();
+                } else if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {//连接失败
+                    Logger.w("连接失败");
+                    connectStatus = 3;
+                    isConnecting = false;
+                    connectStatusListener.onConnectFaild();
                 }
                 break;
 
@@ -406,25 +429,24 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                 if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
                     Logger.w("连接失败");
                     connectStatus = 3;
-                    portConnected = false;
                     isConnecting = false;
                     connectStatusListener.onConnectFaild();
                 }
                 if (newData.startsWith(ResultConstant.COON_START) && newData.endsWith(ResultConstant.COON_END)) {
                     currentInstructionType = InstructionType.NONE;
                     //获取序列号，验证是否连接成功,此处必须做延时操作，否则获取不到序列号
-                    mHandler.postDelayed(() -> fetchSerialNum(), 200);
+                    mHandler.postDelayed(() -> fetchSerialNum(), 500);
                 }
-
                 break;
+
             case READ://读取序列号和版本号
-                if (!isConnected()) {
-                    Logger.w("设备连接成功");
-                    connectStatus = 2;
-                    connectStatusListener.onConnectSuccess();
-                }
                 //获取序列号
                 if (isReadSerialNum(currentInstruction) && newData.length() == getSerialNumLength()) {
+                    if (!isConnected()) {
+                        Logger.w("设备连接成功");
+                        connectStatus = 2;
+                        connectStatusListener.onConnectSuccess();
+                    }
                     Logger.w("serial is : ", newData);
                     dataListener.receiveSerial(newData);
                     fetchVersion();
@@ -438,13 +460,21 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     subscribeTemp();
                 }
 
+                if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST)) {
+                    Logger.w("设备连接失败");
+                    connectStatus = 3;
+                    isConnecting = false;
+                    connectStatusListener.onConnectFaild();
+                }
                 break;
+
             case NOTIFY://订阅温度
                 int position = byteBuffer.position();
                 int length = data.length;
 
                 Logger.w("byteBuffer position : ", position, " ,data length is :", length);
 
+                //只能循环加入byteBuffer，因为每个温度数据最后都有一个“ln”
                 for (int i = 0; i < data.length; i++) {
                     if (byteBuffer.position() < byteBuffer.capacity()) {
                         byteBuffer.put(data[i]);
@@ -467,10 +497,9 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     }
                     sb.delete(0, sb.length());
                     byteBuffer.clear();
-                } else if (newData.startsWith(ResultConstant.AT_LOST)) {//设备断点或异常断开
+                } else if (newData.startsWith(ResultConstant.AT_LOST)) {//设备断电或异常断开
                     Logger.w(String.format("设备异常%s", newData));
                     connectStatus = 1;
-//                    portConnected = false;
                     isConnecting = false;
                     connectStatusListener.onDisconnect(false);
                 } else if (newData.length() > 20) {
@@ -486,6 +515,7 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     writeData(tHex);
                 }
                 break;
+
             case DISCONNECT://断开连接
                 if (newData.startsWith(ResultConstant.AT_LOST)) {//断开成功
                     connectStatus = 0;
@@ -495,17 +525,48 @@ public class AtOperator implements SerialInputOutputManager.Listener {
                     currentInstructionType = InstructionType.NONE;
                 }
                 break;
+
             case NONE:
                 if (newData.startsWith(ResultConstant.AT_LOST) || newData.endsWith(ResultConstant.AT_LOST) || newData.startsWith(ResultConstant.SEND_INSTRUCTION_EOR)) {
                     Logger.w(String.format("设备异常%s", newData));
                     connectStatus = 1;
-                    portConnected = false;
                     isConnecting = false;
                     connectStatusListener.onDisconnect(false);//设备异常断开连接
                 }
                 break;
         }
     }
+
+    /**
+     * 检查串口输入"AT"后的状态，必须要做延时操作，否则容易导致串口异常关闭
+     */
+    private void checkPrepareStatus() {
+        Logger.w("开启检测At是否发送成功的定时器");
+        if (mCheckPrepareTimer == null) {
+            mCheckPrepareTimer = new Timer();
+            mCheckPrepareTimer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    if (mCheckPrepareTimer == null) return;
+//                    if (isOk) {
+//                        clearTimer();
+//                    } else {
+//                        connectDevice();
+//                    }
+                    connectDevice();
+                }
+            }, 5000, 5000);
+        }
+    }
+
+    private void clearTimer() {
+        if (mCheckPrepareTimer != null) {
+            Logger.w("关闭检测AT状态定时器");
+            mCheckPrepareTimer.cancel();
+            mCheckPrepareTimer = null;
+        }
+    }
+
 
     /**
      * 是否是读序列号的指令

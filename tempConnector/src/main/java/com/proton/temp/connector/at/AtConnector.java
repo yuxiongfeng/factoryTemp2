@@ -44,7 +44,7 @@ public class AtConnector implements Connector {
             super.receiveCurrentTemp(temps);
             mLastReceiveDataTime = System.currentTimeMillis();
             dataListener.receiveCurrentTemp(temps);
-            checkConnectStatus();
+//            checkConnectStatus();
         }
 
         @Override

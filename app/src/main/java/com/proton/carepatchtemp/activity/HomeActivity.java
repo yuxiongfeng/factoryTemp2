@@ -80,9 +80,9 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
     private Timer usbTimer;
 
     /**
-     * 一次性插入设备的最大耗时，单个插入大概需要250ms,总共大概需要5s
+     * 单个插入到检测到大概需要250ms
      */
-    private long usbInsetMaxTime = 250 * 10;
+    private long oneUsbInitPermissionTime = 250;
 
     /**
      * 串口信息
@@ -372,7 +372,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
                     doUsbPermissionRequest();
                     stopUsbTimer();
                 }
-            }, usbInsetMaxTime);
+            }, oneUsbInitPermissionTime * listItems.size());
         }
     }
 
@@ -412,7 +412,7 @@ public class HomeActivity extends BaseActivity<ActivityHomeBinding> {
         Logger.w("usb device size is : ", null == listItems ? 0 : listItems.size());
 
 
-        if (isAttach) {
+        if (isAttach && listItems.size() > 0) {
             showDialog("正在初始化usb权限。。。");
             currentDeviceIndex = 0;
             startUsbTimer();
